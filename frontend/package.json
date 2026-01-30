@@ -11,6 +11,9 @@
   "dependencies": {
     "@fontsource/roboto": "^5.2.9",
     "@tailwindcss/vite": "^4.1.18",
+    "@unovis/vue": "^1.6.2",
+    "@vueuse/core": "^14.1.0",
+    "echarts": "^6.0.0",
     "tailwindcss": "^4.1.18",
     "unplugin-fonts": "^1.4.0",
     "vue": "^3.2.37",

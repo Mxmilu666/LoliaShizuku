@@ -19,6 +19,16 @@ function handleLogin() {
 <template>
   <v-container class="oauth-container">
     <div class="oauth-content">
+      <!-- Logo Image -->
+      <div class="text-center mb-2">
+        <v-img
+          src="/src/assets/imgs/yuzu_happy.png"
+          alt="Lolia Shizuku"
+          max-width="150"
+          class="mx-auto"
+        />
+      </div>
+
       <!-- Logo / Title -->
       <div class="text-center mb-7">
         <h1 class="text-h4 font-weight-bold mb-2">Lolia Shizuku</h1>
@@ -44,10 +54,15 @@ function handleLogin() {
 
 <style scoped>
 .oauth-container {
-  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1rem;
 }
 
 .oauth-content {

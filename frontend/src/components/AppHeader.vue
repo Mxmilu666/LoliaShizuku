@@ -1,5 +1,6 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import {
   WindowMinimise,
   WindowToggleMaximise,
@@ -11,8 +12,20 @@ import {
 import AppLogo from "./AppLogo.vue";
 import { useTheme } from "vuetify";
 
+const router = useRouter();
+const route = useRoute();
 const maximised = ref(false);
 const theme = useTheme();
+
+const currentRoute = ref("home");
+
+// 判断是否在 OAuth 页面
+const isOAuthPage = computed(() => route.path === '/oauth');
+
+function navigateTo(route: string) {
+  currentRoute.value = route;
+  router.push({ name: route });
+}
 
 const onToggleMaximize = (isMaximised: boolean) => {
   maximised.value = isMaximised;
@@ -48,12 +61,6 @@ async function handleMaximize() {
 function handleClose() {
   Quit();
 }
-
-function toggleTheme() {
-  theme.global.name.value = theme.global.current.value.dark
-    ? "lightTheme"
-    : "darkTheme";
-}
 </script>
 
 <template>
@@ -69,15 +76,35 @@ function toggleTheme() {
       </div>
     </template>
 
-    <template #append>
-      <!-- 主题切换 -->
-      <v-btn
-        :icon="theme.global.current.value.dark ? 'fas fa-sun' : 'fas fa-moon'"
-        variant="text"
-        size="small"
-        @click="toggleTheme"
-      />
+    <v-spacer />
 
+    <!-- 中间导航按钮 -->
+    <div v-if="!isOAuthPage" class="nav-buttons">
+      <v-btn
+        to="/"
+      >
+        <v-icon start>fas fa-home</v-icon>
+        首页
+      </v-btn>
+
+      <v-btn
+        to="/tunnels"
+      >
+        <v-icon start>fas fa-server</v-icon>
+        隧道
+      </v-btn>
+
+      <v-btn
+        to="/settings"
+      >
+        <v-icon start>fas fa-cog</v-icon>
+        设置
+      </v-btn>
+    </div>
+
+    <v-spacer />
+
+    <template #append>
       <!-- 窗口控制按钮 -->
       <v-btn
         icon="fas fa-minus"
