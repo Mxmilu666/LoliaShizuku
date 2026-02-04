@@ -4,6 +4,8 @@ import (
 	"embed"
 
 	"loliashizuku/backend"
+	"loliashizuku/backend/config"
+	"loliashizuku/backend/services"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,22 +15,47 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+const (
+	minWindowWidth  = 800
+	minWindowHeight = 600
+)
+
 func main() {
+	// Initialize configuration early to restore window size
+	configManager := config.NewManager()
+	if err := configManager.Initialize(); err != nil {
+		println("Failed to initialize config:", err.Error())
+	}
+
+	prefSvc := services.NewPreferencesService(configManager)
+
+	width, height, maximised := prefSvc.GetWindowSize()
+	windowStartState := options.Normal
+	if maximised {
+		windowStartState = options.Maximised
+	}
+
 	// Create an instance of the app structure
-	app := backend.NewApp()
+	app := backend.NewApp(configManager)
+	tokenService := services.NewTokenService()
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "LoliaShizuku",
-		Width:     1024,
-		Height:    768,
-		Frameless: true,
+		Title:            "LoliaShizuku",
+		Width:            width,
+		Height:           height,
+		MinWidth:         minWindowWidth,
+		MinHeight:        minWindowHeight,
+		WindowStartState: windowStartState,
+		Frameless:        true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		OnStartup: app.Startup,
 		Bind: []interface{}{
 			app,
+			prefSvc,
+			tokenService,
 		},
 	})
 

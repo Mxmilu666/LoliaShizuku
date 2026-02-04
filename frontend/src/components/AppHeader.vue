@@ -22,11 +22,6 @@ const currentRoute = ref("home");
 // 判断是否在 OAuth 页面
 const isOAuthPage = computed(() => route.path === '/oauth');
 
-function navigateTo(route: string) {
-  currentRoute.value = route;
-  router.push({ name: route });
-}
-
 const onToggleMaximize = (isMaximised: boolean) => {
   maximised.value = isMaximised;
 };
@@ -79,7 +74,7 @@ function handleClose() {
     <v-spacer />
 
     <!-- 中间导航按钮 -->
-    <div v-if="!isOAuthPage" class="nav-buttons">
+    <div v-if="!isOAuthPage" class="nav-buttons" style="display: flex; gap: 8px">
       <v-btn
         to="/"
       >

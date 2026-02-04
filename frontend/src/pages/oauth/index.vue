@@ -22,7 +22,7 @@ function handleLogin() {
       <!-- Logo Image -->
       <div class="text-center mb-2">
         <v-img
-          src="/src/assets/imgs/yuzu_happy.png"
+          src="./imgs/yuzu_happy.png"
           alt="Lolia Shizuku"
           max-width="150"
           class="mx-auto"

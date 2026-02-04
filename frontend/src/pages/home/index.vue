@@ -24,7 +24,8 @@ interface TrafficDataPoint {
 const userInfo = ref({
   name: "米露",
   email: "user@example.com",
-  avatarUrl: "https://cn.cravatar.com/avatar/ccd1317597a7796d8b5f2b2785e88d5f?s=180&d=mp&r=g",
+  avatarUrl:
+    "https://cn.cravatar.com/avatar/ccd1317597a7796d8b5f2b2785e88d5f?s=180&d=mp&r=g",
 });
 
 // 用户统计数据
@@ -104,15 +105,32 @@ const template = (d: TrafficDataPoint) => {
     </div>
   `;
 };
+
+const chartVars = {
+  "--vis-crosshair-line-stroke-color": "rgb(var(--v-theme-primary))",
+  "--vis-crosshair-circle-stroke-color": "rgb(var(--v-theme-surface))",
+  "--vis-axis-grid-color": "rgba(var(--v-theme-on-surface), 0.08)",
+  "--vis-axis-tick-color": "rgba(var(--v-theme-on-surface), 0.12)",
+  "--vis-axis-tick-label-color": "rgba(var(--v-theme-on-surface), 0.6)",
+  "--vis-tooltip-background-color": "rgb(var(--v-theme-surface))",
+  "--vis-tooltip-border-color": "rgba(var(--v-theme-on-surface), 0.12)",
+  "--vis-tooltip-text-color": "rgb(var(--v-theme-on-surface))",
+  "--vis-tooltip-border-radius": "10px",
+} as const;
 </script>
 
 <template>
-  <div class="home-container">
+  <div class="d-flex flex-column ga-4">
     <!-- 用户问候卡片 -->
-    <v-card elevation="2" class="welcome-card mb-4">
-      <div class="welcome-content">
-        <v-avatar :image="userInfo.avatarUrl" color="primary" size="56" class="user-avatar"/>
-        <div class="welcome-text">
+    <v-card elevation="2" class="pa-6">
+      <div class="d-flex align-center ga-4">
+        <v-avatar
+          :image="userInfo.avatarUrl"
+          color="primary"
+          size="56"
+          class="flex-shrink-0"
+        />
+        <div class="d-flex flex-column ga-1">
           <div class="text-h5 font-weight-bold">
             {{ userInfo.name }}{{ greeting }}
           </div>
@@ -124,57 +142,60 @@ const template = (d: TrafficDataPoint) => {
     </v-card>
 
     <!-- 统计卡片 -->
-    <v-card elevation="2" class="mb-4">
-      <div class="stats-container">
-        <!-- 可用流量 -->
-        <div class="stat-section">
-          <div class="card-body">
-            <v-avatar color="primary" size="40" class="mb-3">
+    <v-card elevation="2">
+      <v-row dense>
+        <v-col cols="12" md="4">
+          <div class="pa-4 d-flex flex-column">
+            <v-avatar color="primary" size="40" class="mb-2">
               <v-icon size="18">fas fa-chart-line</v-icon>
             </v-avatar>
-            <div class="text-caption text-medium-emphasis">可用流量</div>
-            <div class="text-h5 font-weight-bold">
-              {{ formatNumber(stats.availableTraffic) }}
+            <div class="d-flex flex-column">
+              <div class="text-caption text-medium-emphasis">可用流量</div>
+              <div class="text-h5 font-weight-bold">
+                {{ formatNumber(stats.availableTraffic) }}
+              </div>
             </div>
           </div>
-        </div>
+        </v-col>
 
         <v-divider vertical />
 
-        <!-- 隧道数量 -->
-        <div class="stat-section">
-          <div class="card-body">
-            <v-avatar color="success" size="40" class="mb-3">
+        <v-col cols="12" md="4">
+          <div class="pa-4 d-flex flex-column">
+            <v-avatar color="success" size="40" class="mb-2">
               <v-icon size="18">fas fa-server</v-icon>
             </v-avatar>
-            <div class="text-caption text-medium-emphasis">隧道数量</div>
-            <div class="text-h5 font-weight-bold">
-              {{ stats.tunnelCount }} / {{ stats.tunnelLimit }}
+            <div class="d-flex flex-column">
+              <div class="text-caption text-medium-emphasis">隧道数量</div>
+              <div class="text-h5 font-weight-bold">
+                {{ stats.tunnelCount }} / {{ stats.tunnelLimit }}
+              </div>
             </div>
           </div>
-        </div>
+        </v-col>
 
         <v-divider vertical />
 
-        <!-- 带宽限制 -->
-        <div class="stat-section">
-          <div class="card-body">
-            <v-avatar color="warning" size="40" class="mb-3">
+        <v-col cols="12" md="4">
+          <div class="pa-4 d-flex flex-column">
+            <v-avatar color="warning" size="40" class="mb-2">
               <v-icon size="18">fas fa-gauge-high</v-icon>
             </v-avatar>
-            <div class="text-caption text-medium-emphasis">带宽限制</div>
-            <div class="text-h5 font-weight-bold">
-              {{ stats.bandwidthLimit }}
+            <div class="d-flex flex-column">
+              <div class="text-caption text-medium-emphasis">带宽限制</div>
+              <div class="text-h5 font-weight-bold">
+                {{ stats.bandwidthLimit }}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </v-col>
+      </v-row>
     </v-card>
 
     <!-- 图表卡片 -->
-    <v-card ref="cardRef" elevation="2" class="chart-card">
-      <v-card-title class="card-title-wrapper">
-        <div class="card-body">
+    <v-card ref="cardRef" elevation="2">
+      <v-card-title>
+        <div class="d-flex flex-column ga-1">
           <div class="text-caption text-medium-emphasis">
             过去 24 小时流量使用
           </div>
@@ -186,12 +207,13 @@ const template = (d: TrafficDataPoint) => {
 
       <v-divider />
 
-      <v-card-text class="pa-0 pb-3 chart-content">
+      <v-card-text class="pa-0 pb-3">
         <VisXYContainer
           :data="data"
           :padding="{ top: 40 }"
           class="h-96"
           :width="width"
+          :style="chartVars"
         >
           <VisLine
             :x="x"
@@ -219,64 +241,3 @@ const template = (d: TrafficDataPoint) => {
     </v-card>
   </div>
 </template>
-
-<style scoped>
-.home-container {
-  padding: 1rem;
-}
-
-/* 欢迎卡片 */
-.welcome-card {
-  padding: 1.5rem;
-}
-
-.welcome-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.welcome-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.user-avatar {
-  flex-shrink: 0;
-}
-
-/* 统计卡片 */
-.stats-container {
-  display: flex;
-  align-items: stretch;
-  height: 100%;
-}
-
-.stat-section {
-  flex: 1;
-  padding: 1rem;
-  display: flex;
-  justify-content: flex-start;
-}
-
-/* 图表卡片 */
-.chart-card {
-  margin-top: 1rem;
-}
-
-/* Unovis 样式 */
-:deep(.unovis-xy-container) {
-  --vis-crosshair-line-stroke-color: rgb(var(--v-theme-primary));
-  --vis-crosshair-circle-stroke-color: rgb(var(--v-theme-surface));
-
-  --vis-axis-grid-color: rgba(var(--v-theme-on-surface), 0.08);
-  --vis-axis-tick-color: rgba(var(--v-theme-on-surface), 0.12);
-  --vis-axis-tick-label-color: rgba(var(--v-theme-on-surface), 0.6);
-
-  --vis-tooltip-background-color: rgb(var(--v-theme-surface));
-  --vis-tooltip-border-color: rgba(var(--v-theme-on-surface), 0.12);
-  --vis-tooltip-text-color: rgb(var(--v-theme-on-surface));
-  --vis-tooltip-border-radius: 10px;
-}
-</style>

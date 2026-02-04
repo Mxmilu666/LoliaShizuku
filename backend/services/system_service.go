@@ -5,12 +5,16 @@ import (
 	"sync"
 	"time"
 
+	"loliashizuku/backend/config"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type systemService struct {
 	ctx        context.Context
-	appVersion string
+	loopOnce   sync.Once
+
+	configManager *config.Manager
 }
 
 var system *systemService
@@ -19,18 +23,18 @@ var onceSystem sync.Once
 func System() *systemService {
 	if system == nil {
 		onceSystem.Do(func() {
-			system = &systemService{
-				appVersion: "0.0.0",
-			}
-			go system.loopWindowEvent()
+			system = &systemService{}
 		})
 	}
 	return system
 }
 
-func (s *systemService) Start(ctx context.Context, version string) {
+func (s *systemService) Start(ctx context.Context, configManager *config.Manager) {
 	s.ctx = ctx
-	s.appVersion = version
+	s.configManager = configManager
+	s.loopOnce.Do(func() {
+		go s.loopWindowEvent()
+	})
 }
 
 func (s *systemService) loopWindowEvent() {
@@ -56,12 +60,14 @@ func (s *systemService) loopWindowEvent() {
 		if w, h := runtime.WindowGetSize(s.ctx); w != width || h != height {
 			width, height = w, h
 			dirty = true
+			s.saveWindowSize(width, height)
 		}
 
 		// Check maximised state
 		if m := runtime.WindowIsMaximised(s.ctx); m != maximised {
 			maximised = m
 			dirty = true
+			s.saveWindowMaximised(maximised)
 		}
 
 		// Check minimised state
@@ -88,4 +94,18 @@ func (s *systemService) loopWindowEvent() {
 			})
 		}
 	}
+}
+
+func (s *systemService) saveWindowSize(width, height int) {
+	if s.configManager == nil {
+		return
+	}
+	_ = s.configManager.UpdateWindowSize(width, height)
+}
+
+func (s *systemService) saveWindowMaximised(maximised bool) {
+	if s.configManager == nil {
+		return
+	}
+	_ = s.configManager.UpdateWindowMaximised(maximised)
 }
