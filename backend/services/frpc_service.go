@@ -35,26 +35,6 @@ const (
 	frpcVersionProbeTimeout    = 3 * time.Second
 )
 
-var fallbackReleaseSHA256 = map[string]string{
-	"LoliaFrp_android_arm.tar.gz":   "2653b750c04a3f4a5bd4907d872464ecebb9afc417644fc83d18b612bdca7388",
-	"LoliaFrp_android_arm64.tar.gz": "c78e200cfac0d971d653d8c79b5627055dc56589024829d9cc9ece60379d53e3",
-	"LoliaFrp_darwin_amd64.tar.gz":  "893a55e439dcf1a8e552f8c72042016efbdcf4b26827cb29e69ec3f846724006",
-	"LoliaFrp_darwin_arm64.tar.gz":  "e44e343868c7e79e12031283ca7b98ff05f5c5c81064a3a9d7940f152dde806d",
-	"LoliaFrp_freebsd_386.tar.gz":   "c98ee37417edf21ffbaec8b0f73b16ad0cb76c06706a4211c2a3ef650b7b9e34",
-	"LoliaFrp_freebsd_amd64.tar.gz": "3cab06182911860a099a27e88bf5065a5a8fd1293479c0568d9277784ace90e9",
-	"LoliaFrp_freebsd_arm64.tar.gz": "a7fee4a9341bbf280b5db047f3669cb5a2bb8850e0540c9575cf858722db2d75",
-	"LoliaFrp_linux_386.tar.gz":     "83542f512c085a781ddca1dfc390adddbf1e8b0626d997a8f09469ca9adf1a74",
-	"LoliaFrp_linux_amd64.tar.gz":   "8c83ba6041ca867baf6a07e2a91cd47f185dddaa4137cbab7599bf821c9abf79",
-	"LoliaFrp_linux_arm.tar.gz":     "0b62759b8eb6edef1cc49ef9259ef563ecc842adad98547baf28f00996cfd31a",
-	"LoliaFrp_linux_arm64.tar.gz":   "c7e6e9d29bb3fd990d9dbd93d6e5a6a39bf7e3635c0d83df8abcfce40f1c4dde",
-	"LoliaFrp_openbsd_386.tar.gz":   "cb2519739eb0ea5c1827622ee11fee697f8bf3ed12be975eef4601fe2e74291c",
-	"LoliaFrp_openbsd_amd64.tar.gz": "cfa78fdefbcc10c1630236531721cb9fa0ee1cb2c779a0321c010080dd8689b9",
-	"LoliaFrp_openbsd_arm64.tar.gz": "f14cc956831e0540f3dcfad2236b457f6d58b8a62445f9bc936c8ab1b298e6bb",
-	"LoliaFrp_windows_386.zip":      "003a3b52fa7f1c505928e99e57d009692484809d0e2fc08e7ffaceff4e587882",
-	"LoliaFrp_windows_amd64.zip":    "84bb6fc4b936e765fb75068dc8cd0158e1a1bdebd0544e6ed6ede4c7f9b0a123",
-	"LoliaFrp_windows_arm.zip":      "40939f133057d328dfad0f7eee5f06fbc59dfe2c3e06041096f49e68d3f475f6",
-}
-
 type frpcInstallState struct {
 	Version     string `json:"version"`
 	AssetName   string `json:"asset_name"`
@@ -286,9 +266,6 @@ func (s *FrpcService) resolveLatestRelease(ctx context.Context) (*models.FrpcRel
 	}
 
 	sha256Digest := parseSHA256Digest(selected.Digest)
-	if sha256Digest == "" {
-		sha256Digest = fallbackReleaseSHA256[selected.Name]
-	}
 	asset := models.FrpcReleaseAsset{
 		Name:          selected.Name,
 		DownloadURL:   selected.BrowserDownloadURL,
@@ -715,10 +692,31 @@ func applyMirrorURL(rawURL, mirrorURL string) string {
 		return urlValue
 	}
 
+	parsedURL, err := neturl.Parse(urlValue)
+	if err == nil && parsedURL != nil && parsedURL.Scheme != "" && parsedURL.Host != "" {
+		base := strings.TrimRight(mirror, "/")
+		path := strings.TrimLeft(parsedURL.EscapedPath(), "/")
+		if path == "" {
+			path = strings.TrimLeft(parsedURL.Path, "/")
+		}
+
+		rebuilt := base
+		if path != "" {
+			rebuilt += "/" + path
+		}
+		if parsedURL.RawQuery != "" {
+			rebuilt += "?" + parsedURL.RawQuery
+		}
+		if parsedURL.Fragment != "" {
+			rebuilt += "#" + parsedURL.Fragment
+		}
+		return rebuilt
+	}
+
 	if !strings.HasSuffix(mirror, "/") {
 		mirror += "/"
 	}
-	return mirror + urlValue
+	return mirror + strings.TrimLeft(urlValue, "/")
 }
 
 func releaseAssetName(goos, goarch string) (string, string, error) {
