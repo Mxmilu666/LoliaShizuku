@@ -41,11 +41,11 @@ jobs:
             artifact_os: windows
             artifact_arch: arm64
           - name: macos-x64
-            os: macos-13
+            os: macos-15-intel
             artifact_os: macos
             artifact_arch: x64
           - name: macos-arm64
-            os: macos-14
+            os: macos-15
             artifact_os: macos
             artifact_arch: arm64
 
@@ -78,7 +78,10 @@ jobs:
       - name: Install NSIS (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install nsis --no-progress -y
+        run: |
+          choco install nsis --no-progress -y
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
       - name: Install Wails CLI
         shell: bash
@@ -86,12 +89,29 @@ jobs:
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
+      - name: Verify NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          which makensis || true
+          makensis -VERSION || true
+
       - name: Install nfpm (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare frontend (windows-arm64)
+        if: matrix.name == 'windows-arm64'
+        shell: bash
+        run: |
+          pushd frontend
+          bun install
+          npm install --no-save @rollup/rollup-win32-arm64-msvc
+          bun run build
+          popd
 
       - name: Build app
         shell: bash
@@ -107,7 +127,9 @@ jobs:
 
           LDFLAGS="-X loliashizuku/backend/version.Version=${VERSION} -X loliashizuku/backend/version.GitCommit=${COMMIT} -X loliashizuku/backend/version.GitBranch=${TAG} -X loliashizuku/backend/version.BuildTime=${BUILD_TIME}"
 
-          if [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
+          if [[ "${{ matrix.name }}" == "windows-arm64" ]]; then
+            wails build -clean -nsis -skipfrontend -ldflags "$LDFLAGS"
+          elif [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
             wails build -clean -nsis -ldflags "$LDFLAGS"
           else
             wails build -clean -ldflags "$LDFLAGS"
@@ -165,13 +187,18 @@ jobs:
 
           if [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
             PORTABLE_EXE="$(find build/bin -maxdepth 1 -type f -iname 'LoliaShizuku.exe' | head -n 1 || true)"
-            INSTALLER_EXE="$(find build/bin -maxdepth 1 -type f -iname '*installer*.exe' | head -n 1 || true)"
+            INSTALLER_EXE="$(find build -type f -iname '*.exe' | grep -Evi '/LoliaShizuku\.exe$' | grep -Ei '(installer|setup|nsis)' | head -n 1 || true)"
+            if [[ -z "${INSTALLER_EXE}" ]]; then
+              INSTALLER_EXE="$(find build -type f -iname '*.exe' | grep -Evi '/LoliaShizuku\.exe$' | head -n 1 || true)"
+            fi
             if [[ -z "${PORTABLE_EXE}" ]]; then
               echo "portable exe not found in build/bin"
               exit 1
             fi
             if [[ -z "${INSTALLER_EXE}" ]]; then
-              echo "nsis installer exe not found in build/bin"
+              echo "nsis installer exe not found in build/"
+              echo "available exe files under build/:"
+              find build -type f -iname '*.exe' -print || true
               exit 1
             fi
             cp "${PORTABLE_EXE}" "dist/LoliaShizuku${REF_PART}-windows-${ARTIFACT_ARCH}.exe"
