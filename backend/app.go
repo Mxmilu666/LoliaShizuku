@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"loliashizuku/backend/config"
-	"loliashizuku/backend/services"
+	"github.com/Mxmilu666/LoliaShizuku/backend/config"
+	"github.com/Mxmilu666/LoliaShizuku/backend/services"
 )
 
 // App struct

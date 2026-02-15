@@ -1,6 +1,6 @@
 package services
 
-import "loliashizuku/backend/config"
+import "github.com/Mxmilu666/LoliaShizuku/backend/config"
 
 // PreferencesService exposes persisted app preferences to the frontend.
 type PreferencesService struct {

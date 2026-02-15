@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"loliashizuku/backend/models"
+	"github.com/Mxmilu666/LoliaShizuku/backend/models"
 )
 
 type GitHubReleaseAPI struct {

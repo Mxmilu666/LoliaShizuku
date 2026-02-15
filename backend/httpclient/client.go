@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"loliashizuku/backend/version"
+	"github.com/Mxmilu666/LoliaShizuku/backend/version"
 )
 
 var ErrUnauthorized = errors.New("center api unauthorized")

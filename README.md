@@ -1,3 +1,5 @@
+![LoliaShizuku](https://socialify.git.ci/Mxmilu666/LoliaShizuku/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pulls=1&stargazers=1&theme=Auto)
+
 # LoliaShizuku
 
 「ロリア・雫」由 Wails 驱动的 Lolia FRP 第三方客户端

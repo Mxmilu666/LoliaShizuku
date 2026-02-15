@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"loliashizuku/backend/httpclient"
-	"loliashizuku/backend/models"
+	"github.com/Mxmilu666/LoliaShizuku/backend/httpclient"
+	"github.com/Mxmilu666/LoliaShizuku/backend/models"
 )
 
 type CenterAPI struct {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"embed"
 
-	"loliashizuku/backend"
-	"loliashizuku/backend/config"
-	"loliashizuku/backend/services"
+	"github.com/Mxmilu666/LoliaShizuku/backend"
+	"github.com/Mxmilu666/LoliaShizuku/backend/config"
+	"github.com/Mxmilu666/LoliaShizuku/backend/services"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"

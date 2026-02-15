@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"loliashizuku/backend/config"
+	"github.com/Mxmilu666/LoliaShizuku/backend/config"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

@@ -116,7 +116,7 @@ jobs:
             VERSION="dev-${COMMIT}"
           fi
 
-          LDFLAGS="-X loliashizuku/backend/version.Version=${VERSION} -X loliashizuku/backend/version.GitCommit=${COMMIT} -X loliashizuku/backend/version.GitBranch=${TAG} -X loliashizuku/backend/version.BuildTime=${BUILD_TIME}"
+          LDFLAGS="-X github.com/Mxmilu666/LoliaShizuku/backend/version.Version=${VERSION} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitCommit=${COMMIT} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitBranch=${TAG} -X github.com/Mxmilu666/LoliaShizuku/backend/version.BuildTime=${BUILD_TIME}"
 
           if [[ "${{ matrix.name }}" == "windows-arm64" ]]; then
             wails build -clean -nsis -s -ldflags "$LDFLAGS"

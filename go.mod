@@ -1,4 +1,4 @@
-module loliashizuku
+module github.com/Mxmilu666/LoliaShizuku
 
 go 1.24.0
 

@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"loliashizuku/backend/api"
-	"loliashizuku/backend/httpclient"
-	"loliashizuku/backend/models"
+	"github.com/Mxmilu666/LoliaShizuku/backend/api"
+	"github.com/Mxmilu666/LoliaShizuku/backend/httpclient"
+	"github.com/Mxmilu666/LoliaShizuku/backend/models"
 )
 
 const (
