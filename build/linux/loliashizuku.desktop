@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=LoliaShizuku
-Comment=LoliaShizuku desktop client for Lolia FRP.
+Comment=LoliaShizuku desktop client for Lolia FRP
+Comment[zh_CN]=Lolia Shizuku Lolia FRP 桌面客户端
+Comment[ja]=Lolia Shizuku Lolia FRP 用デスクトップクライアント
 Exec=/usr/local/bin/LoliaShizuku
 Icon=loliashizuku
 Terminal=false
