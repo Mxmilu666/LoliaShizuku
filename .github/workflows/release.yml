@@ -62,6 +62,7 @@ jobs:
           cache: true
 
       - name: Setup Bun
+        if: matrix.name != 'windows-arm64'
         uses: oven-sh/setup-bun@v2
 
       - name: Install Linux dependencies
@@ -103,16 +104,6 @@ jobs:
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Prepare frontend (windows-arm64)
-        if: matrix.name == 'windows-arm64'
-        shell: bash
-        run: |
-          pushd frontend
-          bun install
-          npm install --no-save @rollup/rollup-win32-arm64-msvc
-          bun run build
-          popd
-
       - name: Build app
         shell: bash
         run: |
@@ -128,7 +119,7 @@ jobs:
           LDFLAGS="-X loliashizuku/backend/version.Version=${VERSION} -X loliashizuku/backend/version.GitCommit=${COMMIT} -X loliashizuku/backend/version.GitBranch=${TAG} -X loliashizuku/backend/version.BuildTime=${BUILD_TIME}"
 
           if [[ "${{ matrix.name }}" == "windows-arm64" ]]; then
-            wails build -clean -nsis -skipfrontend -ldflags "$LDFLAGS"
+            wails build -clean -nsis -s -ldflags "$LDFLAGS"
           elif [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
             wails build -clean -nsis -ldflags "$LDFLAGS"
           else
