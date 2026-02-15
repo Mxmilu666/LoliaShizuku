@@ -144,6 +144,16 @@ jobs:
               echo "linux binary not found in build/bin"
               exit 1
             fi
+            ICON_SRC="build/appicon.png"
+            if [[ ! -f "${ICON_SRC}" ]]; then
+              echo "nfpm icon not found at ${ICON_SRC}"
+              exit 1
+            fi
+            DESKTOP_SRC="build/linux/loliashizuku.desktop"
+            if [[ ! -f "${DESKTOP_SRC}" ]]; then
+              echo "desktop file not found at ${DESKTOP_SRC}"
+              exit 1
+            fi
 
             cp "${BIN_PATH}" "dist/LoliaShizuku${REF_PART}-linux-${ARTIFACT_ARCH}"
             chmod +x "dist/LoliaShizuku${REF_PART}-linux-${ARTIFACT_ARCH}"
@@ -167,6 +177,8 @@ jobs:
               -e "s|__PKG_RELEASE__|${PKG_RELEASE}|g" \
               -e "s|__HOMEPAGE__|https://github.com/${GITHUB_REPOSITORY}|g" \
               -e "s|__BIN_PATH__|${BIN_PATH}|g" \
+              -e "s|__DESKTOP_PATH__|${DESKTOP_SRC}|g" \
+              -e "s|__ICON_PATH__|${ICON_SRC}|g" \
               build/nfpm.yaml.tmpl > dist/nfpm.yaml
 
             nfpm package -f dist/nfpm.yaml -p deb -t "dist/LoliaShizuku${REF_PART}-linux-${NFPM_ARCH}.deb"

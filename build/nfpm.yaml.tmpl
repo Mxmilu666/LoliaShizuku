@@ -10,8 +10,43 @@ description: LoliaShizuku desktop client for Lolia FRP.
 vendor: LoliaShizuku
 homepage: __HOMEPAGE__
 license: MIT
+
+depends:
+  - ca-certificates
+  - tzdata
+
+overrides:
+  deb:
+    depends:
+      - libgtk-3-0
+      - libwebkit2gtk-4.0-37
+      - ca-certificates
+      - tzdata
+
+  rpm:
+    depends:
+      - gtk3
+      - webkit2gtk4.0
+      - ca-certificates
+      - tzdata
+
+  archlinux:
+    depends:
+      - gtk3
+      - webkit2gtk
+      - ca-certificates
+      - tzdata
+
 contents:
   - src: __BIN_PATH__
     dst: /usr/local/bin/LoliaShizuku
     file_info:
       mode: 0755
+  - src: __DESKTOP_PATH__
+    dst: /usr/share/applications/loliashizuku.desktop
+    file_info:
+      mode: 0644
+  - src: __ICON_PATH__
+    dst: /usr/share/icons/hicolor/512x512/apps/loliashizuku.png
+    file_info:
+      mode: 0644

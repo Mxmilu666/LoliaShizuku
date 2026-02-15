@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LoliaShizuku
+Comment=LoliaShizuku desktop client for Lolia FRP.
+Exec=/usr/local/bin/LoliaShizuku
+Icon=loliashizuku
+Terminal=false
+Categories=Network;
+StartupNotify=true
