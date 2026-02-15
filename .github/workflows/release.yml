@@ -232,7 +232,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
-          path: dist/*
+          path: |
+            dist/*
+            !dist/nfpm.yaml
           if-no-files-found: error
 
   release:
@@ -253,4 +255,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          overwrite_files: true
           files: artifacts/**/*
