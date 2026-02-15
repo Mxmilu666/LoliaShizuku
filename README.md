@@ -89,6 +89,12 @@ frpc 安装在 `os.UserConfigDir()/LoliaShizuku/userdata/frpc/` 下，主要包�
 
 本项目使用 `MIT` 许可证开源
 
+## 项目状态
+
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/4d343b8cfbec4da4ac31da906bd41b3f)](https://app.codacy.com/gh/Mxmilu666/LoliaShizuku/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+
+![Alt](https://repobeats.axiom.co/api/embed/d79f920147af98c01983db8a421018c63bcddc57.svg "Repobeats analytics image")
+
 ## 感谢
 [LoliaFRP-CLI](https://github.com/Lolia-FRP/lolia-frp)
 
