@@ -6,7 +6,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/zalando/go-keyring v0.2.1
-	golang.org/x/oauth2 v0.33.0
+	golang.org/x/oauth2 v0.35.0
 )
 
 require (
