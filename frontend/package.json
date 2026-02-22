@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@fontsource/roboto": "^5.2.9",
-    "@tailwindcss/vite": "^4.1.18",
+    "@tailwindcss/vite": "^4.2.0",
     "@unovis/vue": "^1.6.4",
     "@vueuse/core": "^14.2.1",
     "echarts": "^6.0.0",
