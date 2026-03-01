@@ -26,7 +26,7 @@
     "@fortawesome/fontawesome-free": "^7.2.0",
     "@iconify/json": "^2.2.439",
     "@mdi/font": "^7.4.47",
-    "@types/node": "^25.2.3",
+    "@types/node": "^25.3.3",
     "@vitejs/plugin-vue": "^6.0.4",
     "daisyui": "^5.5.18",
     "typescript": "^5.9.3",
