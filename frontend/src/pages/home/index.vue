@@ -209,6 +209,11 @@ const chartVars = {
   "--vis-tooltip-border-radius": "10px",
 } as const;
 
+// 格式化带宽 (MB/s 转换为 Mbps)
+const formatBandwidth = (mbps: number) => {
+    return (mbps * 8).toFixed(0)
+}
+
 onMounted(() => {
   void loadData();
 });
@@ -281,7 +286,7 @@ onMounted(() => {
             <div class="d-flex flex-column">
               <div class="text-caption text-medium-emphasis">带宽限制</div>
               <div class="text-h5 font-weight-bold">
-                {{ stats.bandwidthLimit }}
+                {{ stats.bandwidthLimit === "-" ? "-" : formatBandwidth(Number(stats.bandwidthLimit.split(" ")[0])) + " Mbps" }}
               </div>
             </div>
           </div>
