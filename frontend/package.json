@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fontsource/roboto": "^5.2.9",
+    "@fontsource/roboto": "^5.2.10",
     "@tailwindcss/vite": "^4.1.18",
     "@unovis/vue": "^1.6.4",
     "@vueuse/core": "^14.2.1",
