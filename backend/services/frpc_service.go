@@ -33,6 +33,10 @@ const (
 	defaultFrpcDownloadTimeout = 2 * time.Minute
 	defaultFrpcInstallTimeout  = 5 * time.Minute
 	frpcVersionProbeTimeout    = 3 * time.Second
+
+	mirrorModeOfficial = "official"
+	mirrorModeBuiltin  = "builtin"
+	mirrorModeCustom   = "custom"
 )
 
 type frpcInstallState struct {
@@ -43,7 +47,29 @@ type frpcInstallState struct {
 }
 
 type frpcUserSettings struct {
-	GitHubMirrorURL string `json:"github_mirror_url"`
+	GitHubMirrorURL string                  `json:"github_mirror_url,omitempty"`
+	MirrorConfig    models.FrpcMirrorConfig `json:"mirror_config,omitempty"`
+}
+
+var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
+	{
+		ID:          "akaere",
+		Name:        "cdn.akaere.online",
+		Description: "Akaere GitHub 路径镜像",
+		BaseURL:     "https://cdn.akaere.online/github.com",
+	},
+	{
+		ID:          "xiaomocs",
+		Name:        "hub.xiaomocs.com",
+		Description: "XiaoMo GitHub 路径镜像",
+		BaseURL:     "https://hub.xiaomocs.com/github",
+	},
+	{
+		ID:          "locyan",
+		Name:        "mirrors.locyan.cn",
+		Description: "乐青云镜像",
+		URLTemplate: "https://mirrors.locyan.cn/github-release/{owner}/{repo}/Release%20{tag}/{asset}",
+	},
 }
 
 type FrpcService struct {
@@ -177,15 +203,57 @@ func (s *FrpcService) RemoveFrpc() error {
 }
 
 func (s *FrpcService) GetGitHubMirrorURL() (string, error) {
-	settings, err := s.loadUserSettings()
+	config, err := s.GetMirrorConfig()
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(settings.GitHubMirrorURL), nil
+	switch config.Mode {
+	case mirrorModeBuiltin:
+		preset, ok := findBuiltinMirrorPreset(config.PresetID)
+		if !ok {
+			return "", nil
+		}
+		return strings.TrimSpace(preset.BaseURL), nil
+	case mirrorModeCustom:
+		return strings.TrimSpace(config.CustomBaseURL), nil
+	default:
+		return "", nil
+	}
 }
 
 func (s *FrpcService) SetGitHubMirrorURL(rawURL string) error {
-	mirrorURL, err := normalizeMirrorURL(rawURL)
+	mirrorURL := strings.TrimSpace(rawURL)
+	if mirrorURL == "" {
+		return s.SetMirrorConfig(models.FrpcMirrorConfig{
+			Mode: mirrorModeOfficial,
+		})
+	}
+
+	for _, preset := range builtinMirrorPresets() {
+		if strings.TrimSpace(preset.BaseURL) != "" && sameNormalizedURL(preset.BaseURL, mirrorURL) {
+			return s.SetMirrorConfig(models.FrpcMirrorConfig{
+				Mode:     mirrorModeBuiltin,
+				PresetID: preset.ID,
+			})
+		}
+	}
+
+	return s.SetMirrorConfig(models.FrpcMirrorConfig{
+		Mode:          mirrorModeCustom,
+		CustomBaseURL: mirrorURL,
+	})
+}
+
+func (s *FrpcService) GetMirrorConfig() (models.FrpcMirrorConfig, error) {
+	settings, err := s.loadUserSettings()
+	if err != nil {
+		return models.FrpcMirrorConfig{}, err
+	}
+	return normalizeStoredMirrorConfig(settings), nil
+}
+
+func (s *FrpcService) SetMirrorConfig(config models.FrpcMirrorConfig) error {
+	normalized, err := normalizeMirrorConfig(config)
 	if err != nil {
 		return err
 	}
@@ -194,7 +262,8 @@ func (s *FrpcService) SetGitHubMirrorURL(rawURL string) error {
 	if err != nil {
 		return err
 	}
-	settings.GitHubMirrorURL = mirrorURL
+	settings.GitHubMirrorURL = ""
+	settings.MirrorConfig = normalized
 	return s.saveUserSettings(settings)
 }
 
@@ -214,15 +283,18 @@ func (s *FrpcService) buildStatus(
 	}
 
 	status := &models.FrpcStatus{
-		GOOS:      runtime.GOOS,
-		GOARCH:    runtime.GOARCH,
-		Paths:     paths,
-		Installed: installed,
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		Paths:          paths,
+		Installed:      installed,
+		BuiltinMirrors: builtinMirrorPresets(),
 	}
-	settings, settingsErr := s.loadUserSettings()
-	if settingsErr == nil {
-		status.GitHubMirrorURL = strings.TrimSpace(settings.GitHubMirrorURL)
+	mirrorConfig, mirrorErr := s.GetMirrorConfig()
+	if mirrorErr == nil {
+		status.MirrorConfig = mirrorConfig
+		status.GitHubMirrorURL = legacyMirrorURLFromConfig(mirrorConfig)
 	} else {
+		status.MirrorConfig = models.FrpcMirrorConfig{Mode: mirrorModeOfficial}
 		status.GitHubMirrorURL = ""
 	}
 
@@ -317,12 +389,10 @@ func (s *FrpcService) downloadArchive(ctx context.Context, url string, outputPat
 	downloadCtx, cancel := context.WithTimeout(ctx, defaultFrpcDownloadTimeout)
 	defer cancel()
 
-	mirrorURL, mirrorErr := s.GetGitHubMirrorURL()
-	if mirrorErr != nil {
-		return "", mirrorErr
+	downloadURL, err := s.resolveDownloadURL(strings.TrimSpace(url))
+	if err != nil {
+		return "", err
 	}
-
-	downloadURL := applyMirrorURL(strings.TrimSpace(url), mirrorURL)
 	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build download request: %w", err)
@@ -665,6 +735,82 @@ func (s *FrpcService) saveUserSettings(settings frpcUserSettings) error {
 	return nil
 }
 
+func builtinMirrorPresets() []models.FrpcMirrorPreset {
+	presets := make([]models.FrpcMirrorPreset, 0, len(defaultBuiltinFrpcMirrors))
+	for _, preset := range defaultBuiltinFrpcMirrors {
+		presets = append(presets, models.FrpcMirrorPreset{
+			ID:          strings.TrimSpace(preset.ID),
+			Name:        strings.TrimSpace(preset.Name),
+			Description: strings.TrimSpace(preset.Description),
+			BaseURL:     strings.TrimSpace(preset.BaseURL),
+			URLTemplate: strings.TrimSpace(preset.URLTemplate),
+		})
+	}
+	return presets
+}
+
+func findBuiltinMirrorPreset(id string) (models.FrpcMirrorPreset, bool) {
+	needle := strings.TrimSpace(id)
+	if needle == "" {
+		return models.FrpcMirrorPreset{}, false
+	}
+
+	for _, preset := range builtinMirrorPresets() {
+		if preset.ID == needle {
+			return preset, true
+		}
+	}
+	return models.FrpcMirrorPreset{}, false
+}
+
+func normalizeStoredMirrorConfig(settings frpcUserSettings) models.FrpcMirrorConfig {
+	if strings.TrimSpace(settings.MirrorConfig.Mode) == "" {
+		return legacyMirrorConfig(settings.GitHubMirrorURL)
+	}
+
+	config, err := normalizeMirrorConfig(settings.MirrorConfig)
+	if err != nil {
+		return models.FrpcMirrorConfig{Mode: mirrorModeOfficial}
+	}
+	return config
+}
+
+func legacyMirrorConfig(rawURL string) models.FrpcMirrorConfig {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return models.FrpcMirrorConfig{Mode: mirrorModeOfficial}
+	}
+
+	for _, preset := range builtinMirrorPresets() {
+		if strings.TrimSpace(preset.BaseURL) != "" && sameNormalizedURL(preset.BaseURL, trimmed) {
+			return models.FrpcMirrorConfig{
+				Mode:     mirrorModeBuiltin,
+				PresetID: preset.ID,
+			}
+		}
+	}
+
+	return models.FrpcMirrorConfig{
+		Mode:          mirrorModeCustom,
+		CustomBaseURL: trimmed,
+	}
+}
+
+func legacyMirrorURLFromConfig(config models.FrpcMirrorConfig) string {
+	switch strings.TrimSpace(config.Mode) {
+	case mirrorModeBuiltin:
+		preset, ok := findBuiltinMirrorPreset(config.PresetID)
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(preset.BaseURL)
+	case mirrorModeCustom:
+		return strings.TrimSpace(config.CustomBaseURL)
+	default:
+		return ""
+	}
+}
+
 func normalizeMirrorURL(rawURL string) (string, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
@@ -673,12 +819,114 @@ func normalizeMirrorURL(rawURL string) (string, error) {
 
 	parsed, err := neturl.Parse(trimmed)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", fmt.Errorf("invalid github mirror url")
+		return "", fmt.Errorf("invalid mirror base url")
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("github mirror url must start with http:// or https://")
+		return "", fmt.Errorf("mirror base url must start with http:// or https://")
+	}
+	return strings.TrimRight(trimmed, "/"), nil
+}
+
+func normalizeMirrorTemplate(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+		return "", fmt.Errorf("mirror url template must start with http:// or https://")
+	}
+	if !containsSupportedTemplateToken(trimmed) {
+		return "", fmt.Errorf("mirror url template must contain at least one supported placeholder")
+	}
+	if _, err := applyMirrorTemplate("https://github.com/example/repo/releases/download/test.zip?download=1", trimmed); err != nil {
+		return "", err
 	}
 	return trimmed, nil
+}
+
+func normalizeMirrorConfig(config models.FrpcMirrorConfig) (models.FrpcMirrorConfig, error) {
+	mode := strings.TrimSpace(config.Mode)
+	if mode == "" {
+		mode = mirrorModeOfficial
+	}
+
+	normalized := models.FrpcMirrorConfig{
+		Mode: mode,
+	}
+
+	switch mode {
+	case mirrorModeOfficial:
+		return normalized, nil
+	case mirrorModeBuiltin:
+		normalized.PresetID = strings.TrimSpace(config.PresetID)
+		if normalized.PresetID == "" {
+			return models.FrpcMirrorConfig{}, fmt.Errorf("builtin mirror preset is required")
+		}
+		if _, ok := findBuiltinMirrorPreset(normalized.PresetID); !ok {
+			return models.FrpcMirrorConfig{}, fmt.Errorf("unknown builtin mirror preset: %s", normalized.PresetID)
+		}
+		return normalized, nil
+	case mirrorModeCustom:
+		baseURL, err := normalizeMirrorURL(config.CustomBaseURL)
+		if err != nil {
+			return models.FrpcMirrorConfig{}, err
+		}
+		urlTemplate, err := normalizeMirrorTemplate(config.CustomURLTemplate)
+		if err != nil {
+			return models.FrpcMirrorConfig{}, err
+		}
+		if baseURL == "" && urlTemplate == "" {
+			return models.FrpcMirrorConfig{}, fmt.Errorf("custom mirror base url or url template is required")
+		}
+		if baseURL != "" && urlTemplate != "" {
+			return models.FrpcMirrorConfig{}, fmt.Errorf("custom mirror base url and url template cannot both be set")
+		}
+		normalized.CustomBaseURL = baseURL
+		normalized.CustomURLTemplate = urlTemplate
+		return normalized, nil
+	default:
+		return models.FrpcMirrorConfig{}, fmt.Errorf("unsupported mirror mode: %s", mode)
+	}
+}
+
+func (s *FrpcService) resolveDownloadURL(rawURL string) (string, error) {
+	config, err := s.GetMirrorConfig()
+	if err != nil {
+		return "", err
+	}
+	return resolveMirrorURL(rawURL, config)
+}
+
+func resolveMirrorURL(rawURL string, config models.FrpcMirrorConfig) (string, error) {
+	urlValue := strings.TrimSpace(rawURL)
+	if urlValue == "" {
+		return "", fmt.Errorf("download url is empty")
+	}
+
+	switch strings.TrimSpace(config.Mode) {
+	case "", mirrorModeOfficial:
+		return urlValue, nil
+	case mirrorModeBuiltin:
+		preset, ok := findBuiltinMirrorPreset(config.PresetID)
+		if !ok {
+			return "", fmt.Errorf("unknown builtin mirror preset: %s", config.PresetID)
+		}
+		return applyMirrorDefinition(urlValue, preset.BaseURL, preset.URLTemplate)
+	case mirrorModeCustom:
+		return applyMirrorDefinition(urlValue, config.CustomBaseURL, config.CustomURLTemplate)
+	default:
+		return "", fmt.Errorf("unsupported mirror mode: %s", config.Mode)
+	}
+}
+
+func applyMirrorDefinition(rawURL, baseURL, urlTemplate string) (string, error) {
+	if strings.TrimSpace(urlTemplate) != "" {
+		return applyMirrorTemplate(rawURL, urlTemplate)
+	}
+	if strings.TrimSpace(baseURL) != "" {
+		return applyMirrorURL(rawURL, baseURL), nil
+	}
+	return "", fmt.Errorf("mirror definition is empty")
 }
 
 func applyMirrorURL(rawURL, mirrorURL string) string {
@@ -717,6 +965,112 @@ func applyMirrorURL(rawURL, mirrorURL string) string {
 		mirror += "/"
 	}
 	return mirror + strings.TrimLeft(urlValue, "/")
+}
+
+func applyMirrorTemplate(rawURL, urlTemplate string) (string, error) {
+	urlValue := strings.TrimSpace(rawURL)
+	template := strings.TrimSpace(urlTemplate)
+	if urlValue == "" {
+		return "", fmt.Errorf("download url is empty")
+	}
+	if template == "" {
+		return "", fmt.Errorf("mirror url template is empty")
+	}
+
+	parsedURL, err := neturl.Parse(urlValue)
+	if err != nil || parsedURL == nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return "", fmt.Errorf("invalid download url")
+	}
+
+	path := strings.TrimLeft(parsedURL.EscapedPath(), "/")
+	if path == "" {
+		path = strings.TrimLeft(parsedURL.Path, "/")
+	}
+	pathWithQuery := path
+	if parsedURL.RawQuery != "" {
+		pathWithQuery += "?" + parsedURL.RawQuery
+	}
+
+	owner := ""
+	repo := ""
+	tag := ""
+	asset := ""
+	if releaseInfo, ok := parseGitHubReleaseDownloadURL(parsedURL); ok {
+		owner = releaseInfo.Owner
+		repo = releaseInfo.Repo
+		tag = releaseInfo.Tag
+		asset = releaseInfo.Asset
+	}
+
+	replaced := strings.NewReplacer(
+		"{owner}", owner,
+		"{repo}", repo,
+		"{tag}", tag,
+		"{asset}", asset,
+	).Replace(template)
+
+	parsedResult, parseErr := neturl.Parse(replaced)
+	if parseErr != nil || parsedResult == nil || parsedResult.Scheme == "" || parsedResult.Host == "" {
+		return "", fmt.Errorf("mirror url template resolved to invalid url")
+	}
+
+	if parsedResult.Scheme != "http" && parsedResult.Scheme != "https" {
+		return "", fmt.Errorf("mirror url template resolved to non-http url")
+	}
+
+	return replaced, nil
+}
+
+func containsSupportedTemplateToken(template string) bool {
+	supportedTokens := []string{
+		"{owner}",
+		"{repo}",
+		"{tag}",
+		"{asset}",
+	}
+	for _, token := range supportedTokens {
+		if strings.Contains(template, token) {
+			return true
+		}
+	}
+	return false
+}
+
+type gitHubReleaseDownloadInfo struct {
+	Owner string
+	Repo  string
+	Tag   string
+	Asset string
+}
+
+func parseGitHubReleaseDownloadURL(parsedURL *neturl.URL) (gitHubReleaseDownloadInfo, bool) {
+	if parsedURL == nil {
+		return gitHubReleaseDownloadInfo{}, false
+	}
+
+	segments := strings.Split(strings.Trim(parsedURL.EscapedPath(), "/"), "/")
+	if len(segments) < 5 {
+		return gitHubReleaseDownloadInfo{}, false
+	}
+	if segments[2] != "releases" || segments[3] != "download" {
+		return gitHubReleaseDownloadInfo{}, false
+	}
+
+	return gitHubReleaseDownloadInfo{
+		Owner: segments[0],
+		Repo:  segments[1],
+		Tag:   segments[4],
+		Asset: segments[len(segments)-1],
+	}, true
+}
+
+func sameNormalizedURL(left, right string) bool {
+	leftURL, leftErr := normalizeMirrorURL(left)
+	rightURL, rightErr := normalizeMirrorURL(right)
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	return leftURL == rightURL
 }
 
 func releaseAssetName(goos, goarch string) (string, string, error) {

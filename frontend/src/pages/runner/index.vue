@@ -34,6 +34,8 @@ const tunnels = ref<
   Array<{
     name: string;
     remark: string;
+    customDomain: string;
+    type: string;
     local: string;
     remote: string;
     remotePort: number;
@@ -49,6 +51,7 @@ const runtimeStatus = ref<RunnerRuntimeStatus>({
   pid: 0,
   started_at: "",
   node_address: "",
+  tunnel_names: [],
   command: "",
   last_error: "",
   log_lines: [],
@@ -58,15 +61,24 @@ const isRunning = computed(() => runtimeStatus.value.running);
 const logText = computed(() => logs.value.join("\n"));
 const statusLabel = computed(() => (isRunning.value ? "运行中" : "未运行"));
 const statusColor = computed(() => (isRunning.value ? "success" : "warning"));
+const activeTunnelNames = computed(() => {
+  const names = runtimeStatus.value.tunnel_names ?? [];
+  if (names.length > 0) {
+    return names.filter((item) => item.trim() !== "");
+  }
+
+  const fallbackName = (runtimeStatus.value.tunnel_name || "").trim();
+  return fallbackName ? [fallbackName] : [];
+});
+const activeTunnelNameSet = computed(() => new Set(activeTunnelNames.value));
 const activeTunnels = computed(() => {
   if (!isRunning.value) {
     return [] as typeof tunnels.value;
   }
-  const activeName = (runtimeStatus.value.tunnel_name || selectedTunnelName.value || "").trim();
-  if (!activeName) {
+  if (activeTunnelNameSet.value.size === 0) {
     return [] as typeof tunnels.value;
   }
-  return tunnels.value.filter((tunnel) => tunnel.name === activeName);
+  return tunnels.value.filter((tunnel) => activeTunnelNameSet.value.has(tunnel.name));
 });
 
 const joinHostPort = (host: string, port?: number | null) => {
@@ -81,9 +93,14 @@ const joinHostPort = (host: string, port?: number | null) => {
 };
 
 const formatRuntimeRemote = (tunnel: {
+  customDomain: string;
   remote: string;
   remotePort: number;
 }) => {
+  const customDomain = (tunnel.customDomain || "").trim();
+  if (customDomain) {
+    return customDomain;
+  }
   const runtimeNodeAddress = (runtimeStatus.value.node_address || "").trim();
   if (!runtimeNodeAddress) {
     return tunnel.remote;
@@ -93,12 +110,38 @@ const formatRuntimeRemote = (tunnel: {
 
 const resolveRuntimeServer = (fallback: string) => {
   const runtimeNodeAddress = (runtimeStatus.value.node_address || "").trim();
+  if (activeTunnels.value.length > 1) {
+    return `${activeTunnels.value.length} 条隧道`;
+  }
+  const activeTunnel = activeTunnels.value[0];
+  const customDomain = (activeTunnel?.customDomain || "").trim();
+  if (customDomain) {
+    return customDomain;
+  }
   if (!runtimeNodeAddress) {
     return fallback;
   }
-  const activeName = (runtimeStatus.value.tunnel_name || selectedTunnelName.value || "").trim();
-  const activeTunnel = tunnels.value.find((item) => item.name === activeName);
   return joinHostPort(runtimeNodeAddress, activeTunnel?.remotePort);
+};
+
+const resolveSummaryProtocol = (fallback: string) => {
+  if (activeTunnels.value.length === 0) {
+    return fallback;
+  }
+
+  const protocols = new Set(
+    activeTunnels.value
+      .map((tunnel) => tunnel.type.trim().toUpperCase())
+      .filter((protocol) => protocol !== ""),
+  );
+
+  if (protocols.size === 1) {
+    return Array.from(protocols)[0];
+  }
+  if (protocols.size > 1) {
+    return "MULTI";
+  }
+  return fallback;
 };
 
 const statusToColor = (status: string) => {
@@ -155,14 +198,17 @@ const loadRunnerData = async () => {
       const tunnelList = tunnelData.list ?? [];
       tunnels.value = tunnelList.map((item) => {
         const node = nodeMap.get(Number(item.node_id));
-        const remoteHost = node?.ip_address || "node";
+        const remoteHost = (item.node_address || "").trim() || node?.ip_address || "node";
         const remotePort = item.remote_port || node?.frps_port || 0;
+        const customDomain = (item.custom_domain || "").trim();
 
         return {
           name: item.name,
           remark: item.remark || item.name,
+          type: item.type || "-",
+          customDomain,
           local: `${item.local_ip}:${item.local_port}`,
-          remote: `${remoteHost}:${remotePort}`,
+          remote: customDomain || `${remoteHost}:${remotePort}`,
           remotePort,
           status: statusToText(item.status),
           statusColor: statusToColor(item.status),
@@ -187,7 +233,7 @@ const loadRunnerData = async () => {
 
       summary.value = {
         server: resolveRuntimeServer(fallbackNodeAddress),
-        protocol: (runnerData.current_tunnel?.type || "-").toUpperCase(),
+        protocol: resolveSummaryProtocol((runnerData.current_tunnel?.type || "-").toUpperCase()),
         version: runnerData.version || "-",
         pid: runtimeStatus.value.pid > 0 ? String(runtimeStatus.value.pid) : "-",
         startTime: runtimeStatus.value.started_at
@@ -219,6 +265,7 @@ const syncRuntimeStatus = async () => {
     summary.value = {
       ...summary.value,
       server: resolveRuntimeServer(fallbackServer),
+      protocol: resolveSummaryProtocol(summary.value.protocol),
       pid: status.pid > 0 ? String(status.pid) : "-",
       startTime: status.started_at
         ? new Date(status.started_at).toLocaleString()

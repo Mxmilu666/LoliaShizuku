@@ -5,6 +5,7 @@ type FrpcServiceBinding = {
   CancelInstallOrUpdateFrpc: () => Promise<void>;
   RemoveFrpc: () => Promise<void>;
   SetGitHubMirrorURL: (url: string) => Promise<void>;
+  SetMirrorConfig: (config: FrpcMirrorConfig) => Promise<void>;
 };
 
 function getFrpcServiceBinding(): FrpcServiceBinding {
@@ -70,11 +71,28 @@ export interface FrpcReleaseInfo {
   asset: FrpcReleaseAsset;
 }
 
+export interface FrpcMirrorPreset {
+  id: string;
+  name: string;
+  description?: string;
+  base_url?: string;
+  url_template?: string;
+}
+
+export interface FrpcMirrorConfig {
+  mode: "official" | "builtin" | "custom";
+  preset_id?: string;
+  custom_base_url?: string;
+  custom_url_template?: string;
+}
+
 export interface FrpcStatus {
   goos: string;
   goarch: string;
   paths: FrpcPaths;
   github_mirror_url: string;
+  mirror_config: FrpcMirrorConfig;
+  builtin_mirrors: FrpcMirrorPreset[];
   installed?: FrpcInstalledInfo;
   latest?: FrpcReleaseInfo;
   update_available: boolean;
@@ -135,6 +153,15 @@ export async function setGitHubMirrorURL(url: string): Promise<void> {
   try {
     const svc = getFrpcServiceBinding();
     await svc.SetGitHubMirrorURL(url);
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function setMirrorConfig(config: FrpcMirrorConfig): Promise<void> {
+  try {
+    const svc = getFrpcServiceBinding();
+    await svc.SetMirrorConfig(config);
   } catch (error) {
     throw parseError(error);
   }

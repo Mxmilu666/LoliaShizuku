@@ -9,7 +9,8 @@ import { useFrpcInstallStore } from "@/stores/frpcInstall";
 import {
   getFrpcStatus,
   removeFrpc,
-  setGitHubMirrorURL,
+  setMirrorConfig,
+  type FrpcMirrorConfig,
   type FrpcStatus,
 } from "@/services/frpc";
 
@@ -19,6 +20,7 @@ defineOptions({
 
 type SettingsPanel = "appearance" | "frpc" | "about" | "account";
 type MirrorMode = "official" | "builtin" | "custom";
+type CustomMirrorMode = "base" | "template";
 type ThemeMode = "system" | "lightTheme" | "darkTheme";
 
 const router = useRouter();
@@ -33,18 +35,25 @@ const activePanel = ref<SettingsPanel>("frpc");
 const snackbar = ref(false);
 const snackbarText = ref("");
 const snackbarColor = ref<"success" | "error" | "info">("info");
-const githubMirrorURLInput = ref("");
 const mirrorMode = ref<MirrorMode>("official");
+const builtinMirrorPresetID = ref("");
+const customMirrorMode = ref<CustomMirrorMode>("base");
+const customMirrorBaseURL = ref("");
+const customMirrorURLTemplate = ref("");
 const themeMode = ref<ThemeMode>("system");
 const logoutLoading = ref(false);
 
-const builtinMirrorURL = "https://cdn.akaere.online/github.com";
 const themeStorageKey = "lolia.theme";
 
 const mirrorModeItems = [
   { title: "github.com", value: "official" as const },
-  { title: "cdn.akaere.online/github.com", value: "builtin" as const },
+  { title: "内置镜像", value: "builtin" as const },
   { title: "自定义网址", value: "custom" as const },
+];
+
+const customMirrorModeItems = [
+  { title: "基础地址", value: "base" as const },
+  { title: "URL 模板", value: "template" as const },
 ];
 
 const themeModeItems = [
@@ -89,6 +98,19 @@ const installedVersion = computed(
   () => status.value?.installed?.version || "未安装",
 );
 const latestVersion = computed(() => status.value?.latest?.tag_name || "-");
+const builtinMirrorItems = computed(() =>
+  (status.value?.builtin_mirrors ?? []).map((preset) => ({
+    title: preset.name || preset.id,
+    value: preset.id,
+    props: {
+      subtitle:
+        preset.description ||
+        preset.base_url ||
+        preset.url_template ||
+        "未提供描述",
+    },
+  })),
+);
 const actionText = computed(() => {
   if (!status.value?.installed?.binary_exists) {
     return "安装 frpc";
@@ -178,21 +200,24 @@ const handleThemeChange = (value: string | null) => {
   showMessage("主题已切换", "success");
 };
 
+const syncMirrorForm = (nextStatus: FrpcStatus) => {
+  const config = nextStatus.mirror_config;
+  mirrorMode.value = config?.mode || "official";
+  builtinMirrorPresetID.value = config?.preset_id || "";
+  customMirrorBaseURL.value = config?.custom_base_url || "";
+  customMirrorURLTemplate.value = config?.custom_url_template || "";
+  customMirrorMode.value = customMirrorURLTemplate.value ? "template" : "base";
+
+  if (!builtinMirrorPresetID.value && nextStatus.builtin_mirrors?.length) {
+    builtinMirrorPresetID.value = nextStatus.builtin_mirrors[0].id;
+  }
+};
+
 const loadStatus = async () => {
   await withGlobalLoading(async () => {
     try {
       status.value = await getFrpcStatus();
-      const mirrorURL = (status.value.github_mirror_url || "").trim();
-      if (mirrorURL === "") {
-        mirrorMode.value = "official";
-        githubMirrorURLInput.value = "";
-      } else if (mirrorURL === builtinMirrorURL) {
-        mirrorMode.value = "builtin";
-        githubMirrorURLInput.value = "";
-      } else {
-        mirrorMode.value = "custom";
-        githubMirrorURLInput.value = mirrorURL;
-      }
+      syncMirrorForm(status.value);
     } catch (error) {
       showMessage(
         error instanceof Error ? error.message : "获取 frpc 状态失败",
@@ -207,6 +232,7 @@ const handleInstallOrUpdate = async () => {
     await withGlobalLoading(async () => {
       const result = await startInstall();
       status.value = result.status;
+      syncMirrorForm(result.status);
       showMessage(`frpc 已安装到 ${result.status.paths.binary_path}`, "success");
     });
   } catch (error) {
@@ -245,33 +271,51 @@ const handleRemove = async () => {
   });
 };
 
-const handleSaveMirrorURL = async () => {
+const handleSaveMirrorConfig = async () => {
   await withGlobalLoading(async () => {
     try {
-      let mirrorURL = "";
+      const config: FrpcMirrorConfig = {
+        mode: mirrorMode.value,
+      };
+
       if (mirrorMode.value === "builtin") {
-        mirrorURL = builtinMirrorURL;
-      } else if (mirrorMode.value === "custom") {
-        mirrorURL = githubMirrorURLInput.value.trim();
-        if (!mirrorURL) {
-          showMessage("请填写自定义加速 URL", "error");
+        if (!builtinMirrorPresetID.value) {
+          showMessage("请选择一个内置镜像", "error");
           return;
+        }
+        config.preset_id = builtinMirrorPresetID.value;
+      } else if (mirrorMode.value === "custom") {
+        if (customMirrorMode.value === "template") {
+          const template = customMirrorURLTemplate.value.trim();
+          if (!template) {
+            showMessage("请填写自定义 URL 模板", "error");
+            return;
+          }
+          config.custom_url_template = template;
+        } else {
+          const baseURL = customMirrorBaseURL.value.trim();
+          if (!baseURL) {
+            showMessage("请填写自定义镜像基础地址", "error");
+            return;
+          }
+          config.custom_base_url = baseURL;
         }
       }
 
-      await setGitHubMirrorURL(mirrorURL);
+      await setMirrorConfig(config);
       showMessage("下载源设置已保存", "success");
       await loadStatus();
     } catch (error) {
-      showMessage(error instanceof Error ? error.message : "保存加速 URL 失败", "error");
+      showMessage(error instanceof Error ? error.message : "保存下载源失败", "error");
     }
   });
 };
 
-const handleClearMirrorURL = async () => {
+const handleUseOfficialMirror = async () => {
   mirrorMode.value = "official";
-  githubMirrorURLInput.value = "";
-  await handleSaveMirrorURL();
+  customMirrorBaseURL.value = "";
+  customMirrorURLTemplate.value = "";
+  await handleSaveMirrorConfig();
 };
 
 const handleLogout = async () => {
@@ -502,19 +546,59 @@ onBeforeUnmount(() => {
                 hide-details="auto"
                 :disabled="installing"
               />
-              <v-text-field
+              <v-select
+                v-if="mirrorMode === 'builtin'"
+                v-model="builtinMirrorPresetID"
+                :items="builtinMirrorItems"
+                item-title="title"
+                item-value="value"
+                hide-details="auto"
+                :disabled="installing"
+                no-data-text="当前没有可用的内置镜像"
+              />
+              <v-alert
+                v-if="mirrorMode === 'builtin' && !builtinMirrorItems.length"
+                type="info"
+                variant="tonal"
+                density="compact"
+              >
+                当前未配置内置镜像，请改用官方源或自定义源。
+              </v-alert>
+              <v-select
                 v-if="mirrorMode === 'custom'"
-                v-model="githubMirrorURLInput"
+                v-model="customMirrorMode"
+                :items="customMirrorModeItems"
+                item-title="title"
+                item-value="value"
+                hide-details="auto"
+                :disabled="installing"
+              />
+              <v-text-field
+                v-if="mirrorMode === 'custom' && customMirrorMode === 'base'"
+                v-model="customMirrorBaseURL"
                 hide-details="auto"
                 placeholder="https://example.com/github.com"
                 :disabled="installing"
               />
+              <v-text-field
+                v-if="mirrorMode === 'custom' && customMirrorMode === 'template'"
+                v-model="customMirrorURLTemplate"
+                hide-details="auto"
+                placeholder="https://mirrors.114514.com/{owner}/{repo}/{tag}/{asset}"
+                :disabled="installing"
+              />
+              <div
+                v-if="mirrorMode === 'custom' && customMirrorMode === 'template'"
+                class="text-caption text-medium-emphasis"
+              >
+                可用占位符：{owner}、{repo}、{tag}、{asset}
+              </div>
               <div class="d-flex flex-wrap ga-2">
                 <v-btn
                   color="primary"
                   variant="tonal"
                   :disabled="installing"
-                  @click="handleSaveMirrorURL"
+                  @click="handleSaveMirrorConfig"
                 >
                   保存设置
                 </v-btn>
@@ -522,7 +606,7 @@ onBeforeUnmount(() => {
                   color="secondary"
                   variant="text"
                   :disabled="installing"
-                  @click="handleClearMirrorURL"
+                  @click="handleUseOfficialMirror"
                 >
                   使用 github.com
                 </v-btn>

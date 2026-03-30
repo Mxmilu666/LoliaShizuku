@@ -38,6 +38,10 @@ export function GetTrafficTunnels(arg1) {
   return window['go']['services']['CenterService']['GetTrafficTunnels'](arg1);
 }
 
+export function GetTunnelDetail(arg1) {
+  return window['go']['services']['CenterService']['GetTunnelDetail'](arg1);
+}
+
 export function GetTunnelsOverview(arg1, arg2, arg3) {
   return window['go']['services']['CenterService']['GetTunnelsOverview'](arg1, arg2, arg3);
 }

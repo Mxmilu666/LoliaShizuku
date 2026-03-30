@@ -35,7 +35,9 @@ export namespace models {
 	    local_ip: string;
 	    local_port: number;
 	    name: string;
+	    node_address?: string;
 	    node_id: number;
+	    node_name?: string;
 	    remark: string;
 	    remote_port: number;
 	    status: string;
@@ -56,7 +58,9 @@ export namespace models {
 	        this.local_ip = source["local_ip"];
 	        this.local_port = source["local_port"];
 	        this.name = source["name"];
+	        this.node_address = source["node_address"];
 	        this.node_id = source["node_id"];
+	        this.node_name = source["node_name"];
 	        this.remark = source["remark"];
 	        this.remote_port = source["remote_port"];
 	        this.status = source["status"];
@@ -298,6 +302,44 @@ export namespace models {
 	        this.binary_exists = source["binary_exists"];
 	    }
 	}
+	export class FrpcMirrorPreset {
+	    id: string;
+	    name: string;
+	    description?: string;
+	    base_url?: string;
+	    url_template?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FrpcMirrorPreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.base_url = source["base_url"];
+	        this.url_template = source["url_template"];
+	    }
+	}
+	export class FrpcMirrorConfig {
+	    mode: string;
+	    preset_id?: string;
+	    custom_base_url?: string;
+	    custom_url_template?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FrpcMirrorConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.preset_id = source["preset_id"];
+	        this.custom_base_url = source["custom_base_url"];
+	        this.custom_url_template = source["custom_url_template"];
+	    }
+	}
 	export class FrpcPaths {
 	    userdata_dir: string;
 	    frpc_dir: string;
@@ -327,6 +369,8 @@ export namespace models {
 	    goarch: string;
 	    paths: FrpcPaths;
 	    github_mirror_url: string;
+	    mirror_config: FrpcMirrorConfig;
+	    builtin_mirrors: FrpcMirrorPreset[];
 	    installed?: FrpcInstalledInfo;
 	    latest?: FrpcReleaseInfo;
 	    update_available: boolean;
@@ -342,6 +386,8 @@ export namespace models {
 	        this.goarch = source["goarch"];
 	        this.paths = this.convertValues(source["paths"], FrpcPaths);
 	        this.github_mirror_url = source["github_mirror_url"];
+	        this.mirror_config = this.convertValues(source["mirror_config"], FrpcMirrorConfig);
+	        this.builtin_mirrors = this.convertValues(source["builtin_mirrors"], FrpcMirrorPreset);
 	        this.installed = this.convertValues(source["installed"], FrpcInstalledInfo);
 	        this.latest = this.convertValues(source["latest"], FrpcReleaseInfo);
 	        this.update_available = source["update_available"];
@@ -470,6 +516,8 @@ export namespace models {
 	
 	
 	
+	
+	
 	export class NodeItem {
 	    id: number;
 	    name: string;
@@ -583,6 +631,7 @@ export namespace models {
 	    pid: number;
 	    started_at?: string;
 	    tunnel_name?: string;
+	    tunnel_names?: string[];
 	    node_address?: string;
 	    command?: string;
 	    last_error?: string;
@@ -598,6 +647,7 @@ export namespace models {
 	        this.pid = source["pid"];
 	        this.started_at = source["started_at"];
 	        this.tunnel_name = source["tunnel_name"];
+	        this.tunnel_names = source["tunnel_names"];
 	        this.node_address = source["node_address"];
 	        this.command = source["command"];
 	        this.last_error = source["last_error"];
@@ -663,6 +713,48 @@ export namespace models {
 		}
 	}
 	
+	export class TunnelDetailData {
+	    bandwidth_limit: number;
+	    client_version: string;
+	    created_at: string;
+	    custom_domain: string;
+	    id: number;
+	    local_ip: string;
+	    local_port: number;
+	    name: string;
+	    node_address: string;
+	    node_id: number;
+	    node_name: string;
+	    remark: string;
+	    remote_port: number;
+	    status: string;
+	    tunnel_token: string;
+	    type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TunnelDetailData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bandwidth_limit = source["bandwidth_limit"];
+	        this.client_version = source["client_version"];
+	        this.created_at = source["created_at"];
+	        this.custom_domain = source["custom_domain"];
+	        this.id = source["id"];
+	        this.local_ip = source["local_ip"];
+	        this.local_port = source["local_port"];
+	        this.name = source["name"];
+	        this.node_address = source["node_address"];
+	        this.node_id = source["node_id"];
+	        this.node_name = source["node_name"];
+	        this.remark = source["remark"];
+	        this.remote_port = source["remote_port"];
+	        this.status = source["status"];
+	        this.tunnel_token = source["tunnel_token"];
+	        this.type = source["type"];
+	    }
+	}
 	
 	export class TunnelListData {
 	    limit: number;

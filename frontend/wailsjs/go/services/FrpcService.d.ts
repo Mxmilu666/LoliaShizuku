@@ -8,8 +8,12 @@ export function GetFrpcStatus():Promise<models.FrpcStatus>;
 
 export function GetGitHubMirrorURL():Promise<string>;
 
+export function GetMirrorConfig():Promise<models.FrpcMirrorConfig>;
+
 export function InstallOrUpdateFrpc():Promise<models.FrpcInstallResult>;
 
 export function RemoveFrpc():Promise<void>;
 
 export function SetGitHubMirrorURL(arg1:string):Promise<void>;
+
+export function SetMirrorConfig(arg1:models.FrpcMirrorConfig):Promise<void>;

@@ -35,6 +35,7 @@ type CenterService struct {
 	runnerCancel      context.CancelFunc
 	runnerStartedAt   time.Time
 	runnerTunnelName  string
+	runnerTunnelNames []string
 	runnerNodeAddress string
 	runnerCommand     string
 	runnerLastError   string
@@ -95,6 +96,13 @@ func (s *CenterService) GetDashboard() (*models.CenterDashboardData, error) {
 	if err != nil {
 		return nil, err
 	}
+	nodeMetaByID := map[int64]models.NodeItem{}
+	nodes, nodesErr := s.api.GetNodes(ctx)
+	if nodesErr == nil {
+		for _, node := range nodes.Nodes {
+			nodeMetaByID[node.ID] = node
+		}
+	}
 	version, err := s.api.GetClientVersion(ctx)
 	if err != nil {
 		return nil, err
@@ -111,7 +119,7 @@ func (s *CenterService) GetDashboard() (*models.CenterDashboardData, error) {
 			Count: int64(len(tunnelList.List)),
 			Total: tunnelList.Total,
 		},
-		Tunnels:   tunnelList.List,
+		Tunnels:   enrichTunnelNodeMeta(tunnelList.List, nodeMetaByID),
 		App:       *version,
 		HomeStats: *homeStats,
 	}
@@ -127,6 +135,7 @@ func (s *CenterService) GetTunnelsOverview(page, limit, days int) (*models.Tunne
 	}
 
 	trafficByName := map[string]models.TrafficTunnelItem{}
+	nodeMetaByID := map[int64]models.NodeItem{}
 	if days > 0 {
 		traffic, trafficErr := s.api.GetTrafficTunnels(ctx, days)
 		if trafficErr == nil {
@@ -135,10 +144,24 @@ func (s *CenterService) GetTunnelsOverview(page, limit, days int) (*models.Tunne
 			}
 		}
 	}
+	nodes, nodesErr := s.api.GetNodes(ctx)
+	if nodesErr == nil {
+		for _, node := range nodes.Nodes {
+			nodeMetaByID[node.ID] = node
+		}
+	}
 
 	enriched := make([]models.TunnelItem, 0, len(tunnelList.List))
 	for _, tunnel := range tunnelList.List {
 		current := tunnel
+		if node, ok := nodeMetaByID[tunnel.NodeID]; ok {
+			if strings.TrimSpace(current.NodeAddress) == "" {
+				current.NodeAddress = strings.TrimSpace(node.IPAddress)
+			}
+			if strings.TrimSpace(current.NodeName) == "" {
+				current.NodeName = strings.TrimSpace(node.Name)
+			}
+		}
 		if traffic, ok := trafficByName[strings.TrimSpace(tunnel.Name)]; ok {
 			current.TotalIn = traffic.TotalIn
 			current.TotalOut = traffic.TotalOut
@@ -186,6 +209,19 @@ func (s *CenterService) GetRunnerData(tunnelID int64) (*models.RunnerData, error
 		copyItem := tunnels.List[0]
 		selectedTunnel = &copyItem
 	}
+	if selectedTunnel != nil {
+		for _, node := range nodes.Nodes {
+			if node.ID == selectedTunnel.NodeID {
+				if strings.TrimSpace(selectedTunnel.NodeAddress) == "" {
+					selectedTunnel.NodeAddress = strings.TrimSpace(node.IPAddress)
+				}
+				if strings.TrimSpace(selectedTunnel.NodeName) == "" {
+					selectedTunnel.NodeName = strings.TrimSpace(node.Name)
+				}
+				break
+			}
+		}
+	}
 
 	return &models.RunnerData{
 		Config:        "",
@@ -195,12 +231,32 @@ func (s *CenterService) GetRunnerData(tunnelID int64) (*models.RunnerData, error
 	}, nil
 }
 
-func (s *CenterService) StartRunner(tunnelName string) (*models.RunnerRuntimeStatus, error) {
+func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntimeStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultHTTPTimeout)
 	defer cancel()
 
-	selectedTunnelName := strings.TrimSpace(tunnelName)
-	if selectedTunnelName == "" {
+	selectedTunnelNames := normalizeTunnelNames(tunnelNames)
+	s.runnerMu.Lock()
+	currentlyRunning := s.isRunnerRunningLocked()
+	existingTunnelNames := append([]string(nil), s.runnerTunnelNames...)
+	if len(existingTunnelNames) == 0 && strings.TrimSpace(s.runnerTunnelName) != "" {
+		existingTunnelNames = []string{strings.TrimSpace(s.runnerTunnelName)}
+	}
+	currentStatus := s.buildRunnerStatusLocked()
+	s.runnerMu.Unlock()
+
+	if currentlyRunning {
+		mergedTunnelNames := mergeTunnelNames(existingTunnelNames, selectedTunnelNames)
+		if len(mergedTunnelNames) == len(existingTunnelNames) {
+			return currentStatus, nil
+		}
+		if _, err := s.StopRunner(); err != nil {
+			return nil, err
+		}
+		selectedTunnelNames = mergedTunnelNames
+	}
+
+	if len(selectedTunnelNames) == 0 {
 		tunnels, err := s.api.GetUserTunnels(ctx, 1, 100)
 		if err != nil {
 			return nil, err
@@ -208,28 +264,36 @@ func (s *CenterService) StartRunner(tunnelName string) (*models.RunnerRuntimeSta
 		if len(tunnels.List) == 0 {
 			return nil, fmt.Errorf("当前账号暂无隧道，无法启动 frpc")
 		}
-		selectedTunnelName = strings.TrimSpace(tunnels.List[0].Name)
+		selectedTunnelNames = []string{strings.TrimSpace(tunnels.List[0].Name)}
 	}
-	if selectedTunnelName == "" {
+	if len(selectedTunnelNames) == 0 {
 		return nil, fmt.Errorf("无效的隧道名称")
 	}
 
-	tunnelDetail, err := s.api.GetTunnelDetail(ctx, selectedTunnelName)
-	if err != nil {
-		return nil, err
-	}
-	if tunnelDetail == nil {
-		return nil, fmt.Errorf("获取隧道详情失败：%s", selectedTunnelName)
-	}
-	if tunnelDetail.ID <= 0 {
-		return nil, fmt.Errorf("隧道详情缺少有效 id：%s", selectedTunnelName)
-	}
+	tokenArgs := make([]string, 0, len(selectedTunnelNames))
+	resolvedTunnelNames := make([]string, 0, len(selectedTunnelNames))
+	nodeAddresses := make([]string, 0, len(selectedTunnelNames))
+	for _, selectedTunnelName := range selectedTunnelNames {
+		tunnelDetail, err := s.api.GetTunnelDetail(ctx, selectedTunnelName)
+		if err != nil {
+			return nil, err
+		}
+		if tunnelDetail == nil {
+			return nil, fmt.Errorf("获取隧道详情失败：%s", selectedTunnelName)
+		}
+		if tunnelDetail.ID <= 0 {
+			return nil, fmt.Errorf("隧道详情缺少有效 id：%s", selectedTunnelName)
+		}
 
-	token := strings.TrimSpace(tunnelDetail.TunnelToken)
-	if token == "" {
-		return nil, fmt.Errorf("隧道详情未返回 tunnel_token：%s", selectedTunnelName)
+		token := strings.TrimSpace(tunnelDetail.TunnelToken)
+		if token == "" {
+			return nil, fmt.Errorf("隧道详情未返回 tunnel_token：%s", selectedTunnelName)
+		}
+
+		tokenArgs = append(tokenArgs, fmt.Sprintf("%d:%s", tunnelDetail.ID, token))
+		resolvedTunnelNames = append(resolvedTunnelNames, strings.TrimSpace(tunnelDetail.Name))
+		nodeAddresses = append(nodeAddresses, strings.TrimSpace(tunnelDetail.NodeAddress))
 	}
-	tokenArg := fmt.Sprintf("%d:%s", tunnelDetail.ID, token)
 
 	binaryPath, err := resolveLocalFrpcBinaryPath()
 	if err != nil {
@@ -251,7 +315,11 @@ func (s *CenterService) StartRunner(tunnelName string) (*models.RunnerRuntimeSta
 	}
 
 	runCtx, runCancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(runCtx, binaryPath, "-t", tokenArg)
+	cmdArgs := make([]string, 0, len(tokenArgs)*2)
+	for _, tokenArg := range tokenArgs {
+		cmdArgs = append(cmdArgs, "-t", tokenArg)
+	}
+	cmd := exec.CommandContext(runCtx, binaryPath, cmdArgs...)
 	configureBackgroundProcess(cmd)
 
 	stdout, err := cmd.StdoutPipe()
@@ -276,9 +344,10 @@ func (s *CenterService) StartRunner(tunnelName string) (*models.RunnerRuntimeSta
 	s.runnerCmd = cmd
 	s.runnerCancel = runCancel
 	s.runnerStartedAt = time.Now().UTC()
-	s.runnerTunnelName = tunnelDetail.Name
-	s.runnerNodeAddress = tunnelDetail.NodeAddress
-	s.runnerCommand = fmt.Sprintf("%s -t %s", binaryPath, maskRunnerTokenArg(tokenArg))
+	s.runnerTunnelName = firstNonEmptyString(resolvedTunnelNames...)
+	s.runnerTunnelNames = append([]string(nil), resolvedTunnelNames...)
+	s.runnerNodeAddress = firstNonEmptyString(nodeAddresses...)
+	s.runnerCommand = buildMaskedRunnerCommand(binaryPath, tokenArgs)
 	s.runnerLastError = ""
 	s.runnerLogs = []string{
 		fmt.Sprintf("[runner] started: pid=%d", cmd.Process.Pid),
@@ -326,9 +395,25 @@ func (s *CenterService) StopRunner() (*models.RunnerRuntimeStatus, error) {
 	}
 
 	s.runnerMu.Lock()
-	if s.isRunnerRunningLocked() && cmd != nil && cmd.Process != nil {
+	shouldKill := s.isRunnerRunningLocked() && cmd != nil && cmd.Process != nil
+	s.runnerMu.Unlock()
+
+	if shouldKill {
 		_ = cmd.Process.Kill()
 	}
+
+	deadline = time.Now().Add(runnerStopTimeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+		s.runnerMu.Lock()
+		running := s.isRunnerRunningLocked()
+		s.runnerMu.Unlock()
+		if !running {
+			break
+		}
+	}
+
+	s.runnerMu.Lock()
 	status := s.buildRunnerStatusLocked()
 	s.runnerMu.Unlock()
 	return status, nil
@@ -371,12 +456,37 @@ func (s *CenterService) GetFrpcConfig(tunnel string) (*models.FrpcConfigData, er
 	return s.api.GetFrpcConfig(context.Background(), tunnel)
 }
 
+func (s *CenterService) GetTunnelDetail(tunnelName string) (*models.TunnelDetailData, error) {
+	return s.api.GetTunnelDetail(context.Background(), tunnelName)
+}
+
 func (s *CenterService) GetClientVersion() (*models.AppVersionInfo, error) {
 	return s.api.GetClientVersion(context.Background())
 }
 
 func (s *CenterService) GetHomeStats() (*models.HomeStatsData, error) {
 	return s.api.GetHomeStats(context.Background())
+}
+
+func enrichTunnelNodeMeta(tunnels []models.TunnelItem, nodeMetaByID map[int64]models.NodeItem) []models.TunnelItem {
+	if len(tunnels) == 0 {
+		return nil
+	}
+
+	enriched := make([]models.TunnelItem, 0, len(tunnels))
+	for _, tunnel := range tunnels {
+		current := tunnel
+		if node, ok := nodeMetaByID[tunnel.NodeID]; ok {
+			if strings.TrimSpace(current.NodeAddress) == "" {
+				current.NodeAddress = strings.TrimSpace(node.IPAddress)
+			}
+			if strings.TrimSpace(current.NodeName) == "" {
+				current.NodeName = strings.TrimSpace(node.Name)
+			}
+		}
+		enriched = append(enriched, current)
+	}
+	return enriched
 }
 
 func (s *CenterService) isRunnerRunningLocked() bool {
@@ -395,6 +505,7 @@ func (s *CenterService) buildRunnerStatusLocked() *models.RunnerRuntimeStatus {
 		Command:     s.runnerCommand,
 		LastError:   s.runnerLastError,
 		TunnelName:  s.runnerTunnelName,
+		TunnelNames: append([]string(nil), s.runnerTunnelNames...),
 		NodeAddress: s.runnerNodeAddress,
 	}
 
@@ -507,4 +618,70 @@ func maskRunnerTokenArg(tokenArg string) string {
 	}
 
 	return fmt.Sprintf("%s:%s***%s", parts[0], token[:4], token[len(token)-4:])
+}
+
+func buildMaskedRunnerCommand(binaryPath string, tokenArgs []string) string {
+	if len(tokenArgs) == 0 {
+		return binaryPath
+	}
+
+	parts := make([]string, 0, 1+len(tokenArgs)*2)
+	parts = append(parts, binaryPath)
+	for _, tokenArg := range tokenArgs {
+		parts = append(parts, "-t", maskRunnerTokenArg(tokenArg))
+	}
+	return strings.Join(parts, " ")
+}
+
+func normalizeTunnelNames(tunnelNames []string) []string {
+	if len(tunnelNames) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(tunnelNames))
+	seen := make(map[string]struct{}, len(tunnelNames))
+	for _, tunnelName := range tunnelNames {
+		trimmed := strings.TrimSpace(tunnelName)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+func mergeTunnelNames(current []string, requested []string) []string {
+	merged := make([]string, 0, len(current)+len(requested))
+	seen := make(map[string]struct{}, len(current)+len(requested))
+
+	appendNames := func(names []string) {
+		for _, name := range names {
+			trimmed := strings.TrimSpace(name)
+			if trimmed == "" {
+				continue
+			}
+			if _, ok := seen[trimmed]; ok {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			merged = append(merged, trimmed)
+		}
+	}
+
+	appendNames(current)
+	appendNames(requested)
+	return merged
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

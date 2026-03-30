@@ -36,6 +36,21 @@ type FrpcReleaseInfo struct {
 	Asset       FrpcReleaseAsset `json:"asset"`
 }
 
+type FrpcMirrorPreset struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	BaseURL     string `json:"base_url,omitempty"`
+	URLTemplate string `json:"url_template,omitempty"`
+}
+
+type FrpcMirrorConfig struct {
+	Mode              string `json:"mode"`
+	PresetID          string `json:"preset_id,omitempty"`
+	CustomBaseURL     string `json:"custom_base_url,omitempty"`
+	CustomURLTemplate string `json:"custom_url_template,omitempty"`
+}
+
 type FrpcInstalledInfo struct {
 	Version      string `json:"version"`
 	AssetName    string `json:"asset_name"`
@@ -60,6 +75,8 @@ type FrpcStatus struct {
 	GOARCH          string             `json:"goarch"`
 	Paths           FrpcPaths          `json:"paths"`
 	GitHubMirrorURL string             `json:"github_mirror_url"`
+	MirrorConfig    FrpcMirrorConfig   `json:"mirror_config"`
+	BuiltinMirrors  []FrpcMirrorPreset `json:"builtin_mirrors"`
 	Installed       *FrpcInstalledInfo `json:"installed,omitempty"`
 	Latest          *FrpcReleaseInfo   `json:"latest,omitempty"`
 	UpdateAvailable bool               `json:"update_available"`

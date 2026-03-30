@@ -3,7 +3,8 @@ type CenterServiceBinding = {
   GetRunnerRuntimeStatus: () => Promise<any>;
   GetTunnelsOverview: (page: number, limit: number, days: number) => Promise<any>;
   GetRunnerData: (tunnelID: number) => Promise<any>;
-  StartRunner: (tunnelName: string) => Promise<any>;
+  GetTunnelDetail: (tunnelName: string) => Promise<any>;
+  StartRunner: (tunnelNames: string[]) => Promise<any>;
   StopRunner: () => Promise<any>;
   GetTrafficDaily: (days: number) => Promise<any>;
 };
@@ -73,7 +74,9 @@ export interface TunnelOverviewItem {
   local_ip: string;
   local_port: number;
   name: string;
+  node_address?: string;
   node_id: number;
+  node_name?: string;
   remark: string;
   remote_port: number;
   status: string;
@@ -117,11 +120,31 @@ export interface RunnerData {
   current_tunnel?: TunnelOverviewItem;
 }
 
+export interface TunnelDetailData {
+  bandwidth_limit: number;
+  client_version: string;
+  created_at: string;
+  custom_domain: string;
+  id: number;
+  local_ip: string;
+  local_port: number;
+  name: string;
+  node_address: string;
+  node_id: number;
+  node_name: string;
+  remark: string;
+  remote_port: number;
+  status: string;
+  tunnel_token: string;
+  type: string;
+}
+
 export interface RunnerRuntimeStatus {
   running: boolean;
   pid: number;
   started_at?: string;
   tunnel_name?: string;
+  tunnel_names?: string[];
   node_address?: string;
   command?: string;
   last_error?: string;
@@ -159,6 +182,15 @@ export async function getRunnerData(tunnelID = 0): Promise<RunnerData> {
   }
 }
 
+export async function getTunnelDetail(tunnelName: string): Promise<TunnelDetailData> {
+  try {
+    const svc = getCenterServiceBinding();
+    return (await svc.GetTunnelDetail(tunnelName)) as TunnelDetailData;
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
 export async function getRunnerRuntimeStatus(): Promise<RunnerRuntimeStatus> {
   try {
     const svc = getCenterServiceBinding();
@@ -168,10 +200,17 @@ export async function getRunnerRuntimeStatus(): Promise<RunnerRuntimeStatus> {
   }
 }
 
-export async function startRunner(tunnelName = ""): Promise<RunnerRuntimeStatus> {
+export async function startRunner(
+  tunnelNames: string | string[] = [],
+): Promise<RunnerRuntimeStatus> {
   try {
     const svc = getCenterServiceBinding();
-    return (await svc.StartRunner(tunnelName)) as RunnerRuntimeStatus;
+    const normalizedTunnelNames = Array.isArray(tunnelNames)
+      ? tunnelNames
+      : tunnelNames.trim()
+        ? [tunnelNames]
+        : [];
+    return (await svc.StartRunner(normalizedTunnelNames)) as RunnerRuntimeStatus;
   } catch (error) {
     throw parseError(error);
   }

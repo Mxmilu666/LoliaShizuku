@@ -14,6 +14,10 @@ export function GetGitHubMirrorURL() {
   return window['go']['services']['FrpcService']['GetGitHubMirrorURL']();
 }
 
+export function GetMirrorConfig() {
+  return window['go']['services']['FrpcService']['GetMirrorConfig']();
+}
+
 export function InstallOrUpdateFrpc() {
   return window['go']['services']['FrpcService']['InstallOrUpdateFrpc']();
 }
@@ -24,4 +28,8 @@ export function RemoveFrpc() {
 
 export function SetGitHubMirrorURL(arg1) {
   return window['go']['services']['FrpcService']['SetGitHubMirrorURL'](arg1);
+}
+
+export function SetMirrorConfig(arg1) {
+  return window['go']['services']['FrpcService']['SetMirrorConfig'](arg1);
 }

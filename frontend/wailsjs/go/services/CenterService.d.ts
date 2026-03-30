@@ -20,6 +20,8 @@ export function GetTrafficDaily(arg1:number):Promise<models.DailyTrafficResponse
 
 export function GetTrafficTunnels(arg1:number):Promise<models.TrafficTunnelData>;
 
+export function GetTunnelDetail(arg1:string):Promise<models.TunnelDetailData>;
+
 export function GetTunnelsOverview(arg1:number,arg2:number,arg3:number):Promise<models.TunnelOverviewData>;
 
 export function GetUserInfo():Promise<models.UserInfoData>;
@@ -28,6 +30,6 @@ export function GetUserTrafficStats():Promise<models.UserTrafficData>;
 
 export function GetUserTunnels(arg1:number,arg2:number):Promise<models.TunnelListData>;
 
-export function StartRunner(arg1:string):Promise<models.RunnerRuntimeStatus>;
+export function StartRunner(arg1:Array<string>):Promise<models.RunnerRuntimeStatus>;
 
 export function StopRunner():Promise<models.RunnerRuntimeStatus>;

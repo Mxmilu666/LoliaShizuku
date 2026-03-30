@@ -19,7 +19,7 @@ const errorMessage = ref("");
 const searchQuery = ref("");
 const tunnels = ref<TunnelOverviewItem[]>([]);
 const globalLoadingStore = useGlobalLoadingStore();
-const withGlobalLoading = <T>(task: () => Promise<T>) =>
+const withGlobalLoading = <T,>(task: () => Promise<T>) =>
   globalLoadingStore.withGlobalLoading(task);
 const router = useRouter();
 const runnerStatus = ref<RunnerRuntimeStatus>({
@@ -27,6 +27,7 @@ const runnerStatus = ref<RunnerRuntimeStatus>({
   pid: 0,
   started_at: "",
   tunnel_name: "",
+  tunnel_names: [],
   command: "",
   last_error: "",
   log_lines: [],
@@ -111,6 +112,24 @@ const getStatusText = (status: string) => {
   return status || "未知";
 };
 
+const getTunnelTarget = (tunnel: TunnelOverviewItem) => {
+  const customDomain = (tunnel.custom_domain || "").trim();
+  if (customDomain) {
+    return customDomain;
+  }
+
+  const nodeAddress = (tunnel.node_address || "").trim();
+  if (nodeAddress) {
+    return `${nodeAddress}:${tunnel.remote_port}`;
+  }
+
+  if (tunnel.remote_port > 0) {
+    return `端口 ${tunnel.remote_port}`;
+  }
+
+  return "-";
+};
+
 const openTunnelDetail = (name: string) => {
   const tunnelName = name.trim();
   if (!tunnelName) {
@@ -123,13 +142,16 @@ const openTunnelDetail = (name: string) => {
 
 const isStartedTunnel = (tunnelName: string) =>
   isRunnerRunning.value &&
-  (runnerStatus.value.tunnel_name || "").trim() === tunnelName.trim();
+  ((runnerStatus.value.tunnel_names ?? []).some(
+    (currentTunnelName) => currentTunnelName.trim() === tunnelName.trim(),
+  ) ||
+    (runnerStatus.value.tunnel_name || "").trim() === tunnelName.trim());
 
 const handleStartTunnel = async (tunnelName: string) => {
   errorMessage.value = "";
   startingTunnelName.value = tunnelName;
   try {
-    runnerStatus.value = await startRunner(tunnelName);
+    runnerStatus.value = await startRunner([tunnelName]);
     await loadTunnels();
     await router.push("/runner");
   } catch (error) {
@@ -194,12 +216,17 @@ onMounted(() => {
 
           <v-card-text class="d-flex flex-column ga-2 pt-0">
             <div class="d-flex align-center">
+              <v-icon size="14" class="me-2">fas fa-server</v-icon>
+              <span class="text-caption">{{ tunnel.node_name }}</span>
+            </div>
+
+            <div class="d-flex align-center">
               <v-icon size="14" class="me-2">fas fa-network-wired</v-icon>
               <span class="text-caption">{{ tunnel.type.toUpperCase() }}</span>
             </div>
 
             <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-server</v-icon>
+              <v-icon size="14" class="me-2">fas fa-earth-africa</v-icon>
               <span class="text-caption">
                 {{ tunnel.local_ip }}:{{ tunnel.local_port }}
               </span>
@@ -207,7 +234,7 @@ onMounted(() => {
 
             <div class="d-flex align-center">
               <v-icon size="14" class="me-2">fas fa-arrow-right</v-icon>
-              <span class="text-caption">端口 {{ tunnel.remote_port }}</span>
+              <span class="text-caption">{{ getTunnelTarget(tunnel) }}</span>
             </div>
 
             <div class="d-flex align-center">
@@ -228,7 +255,9 @@ onMounted(() => {
               size="small"
               prepend-icon="fas fa-play"
               :loading="startingTunnelName === tunnel.name"
-              :disabled="!!startingTunnelName || isRunnerRunning"
+              :disabled="
+                !!startingTunnelName || isStartedTunnel(tunnel.name)
+              "
               @click="handleStartTunnel(tunnel.name)"
             >
               {{ isStartedTunnel(tunnel.name) ? "已启动" : "启动" }}

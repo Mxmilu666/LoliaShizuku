@@ -39,6 +39,7 @@ type RunnerRuntimeStatus struct {
 	PID         int      `json:"pid"`
 	StartedAt   string   `json:"started_at,omitempty"`
 	TunnelName  string   `json:"tunnel_name,omitempty"`
+	TunnelNames []string `json:"tunnel_names,omitempty"`
 	NodeAddress string   `json:"node_address,omitempty"`
 	Command     string   `json:"command,omitempty"`
 	LastError   string   `json:"last_error,omitempty"`
@@ -83,7 +84,9 @@ type TunnelItem struct {
 	LocalIP        string `json:"local_ip"`
 	LocalPort      int64  `json:"local_port"`
 	Name           string `json:"name"`
+	NodeAddress    string `json:"node_address,omitempty"`
 	NodeID         int64  `json:"node_id"`
+	NodeName       string `json:"node_name,omitempty"`
 	Remark         string `json:"remark"`
 	RemotePort     int64  `json:"remote_port"`
 	Status         string `json:"status"`
