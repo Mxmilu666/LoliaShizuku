@@ -403,7 +403,9 @@ func (s *FrpcService) downloadArchive(ctx context.Context, url string, outputPat
 	if err != nil {
 		return "", fmt.Errorf("download release asset: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("download release asset failed: status=%d", resp.StatusCode)
@@ -572,13 +574,17 @@ func extractBinaryFromTarGz(archivePath, binaryName, outputPath string) error {
 	if err != nil {
 		return fmt.Errorf("open tar.gz archive: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
 		return fmt.Errorf("read gzip archive: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() {
+		_ = gzReader.Close()
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 	for {
@@ -605,7 +611,9 @@ func extractBinaryFromZip(archivePath, binaryName, outputPath string) error {
 	if err != nil {
 		return fmt.Errorf("open zip archive: %w", err)
 	}
-	defer zipReader.Close()
+	defer func() {
+		_ = zipReader.Close()
+	}()
 
 	for _, file := range zipReader.File {
 		if !file.FileInfo().Mode().IsRegular() {
@@ -619,7 +627,9 @@ func extractBinaryFromZip(archivePath, binaryName, outputPath string) error {
 		if err != nil {
 			return fmt.Errorf("open zip file entry %s: %w", file.Name, err)
 		}
-		defer reader.Close()
+		defer func() {
+			_ = reader.Close()
+		}()
 
 		return writeExecutableFile(outputPath, reader)
 	}
@@ -980,15 +990,6 @@ func applyMirrorTemplate(rawURL, urlTemplate string) (string, error) {
 	parsedURL, err := neturl.Parse(urlValue)
 	if err != nil || parsedURL == nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return "", fmt.Errorf("invalid download url")
-	}
-
-	path := strings.TrimLeft(parsedURL.EscapedPath(), "/")
-	if path == "" {
-		path = strings.TrimLeft(parsedURL.Path, "/")
-	}
-	pathWithQuery := path
-	if parsedURL.RawQuery != "" {
-		pathWithQuery += "?" + parsedURL.RawQuery
 	}
 
 	owner := ""

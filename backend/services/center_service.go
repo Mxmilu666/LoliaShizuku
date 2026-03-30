@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -26,6 +27,8 @@ const (
 	runnerLogMaxLines       = 300
 	runnerStopTimeout       = 3 * time.Second
 )
+
+var runnerTokenArgPattern = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9._~+/=-]+$`)
 
 type CenterService struct {
 	api *api.CenterAPI
@@ -295,16 +298,9 @@ func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntime
 		nodeAddresses = append(nodeAddresses, strings.TrimSpace(tunnelDetail.NodeAddress))
 	}
 
-	binaryPath, err := resolveLocalFrpcBinaryPath()
+	binaryPath, err := resolveTrustedRunnerBinaryPath()
 	if err != nil {
 		return nil, err
-	}
-	exists, err := fileExistsForRunner(binaryPath)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, fmt.Errorf("frpc 未安装，请先在设置页面安装: %s", binaryPath)
 	}
 
 	s.runnerMu.Lock()
@@ -317,8 +313,14 @@ func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntime
 	runCtx, runCancel := context.WithCancel(context.Background())
 	cmdArgs := make([]string, 0, len(tokenArgs)*2)
 	for _, tokenArg := range tokenArgs {
+		if !runnerTokenArgPattern.MatchString(tokenArg) {
+			runCancel()
+			s.runnerMu.Unlock()
+			return nil, fmt.Errorf("非法的 tunnel token 参数")
+		}
 		cmdArgs = append(cmdArgs, "-t", tokenArg)
 	}
+	// #nosec G204 -- binaryPath is constrained to the managed frpc install path and cmdArgs are validated token arguments.
 	cmd := exec.CommandContext(runCtx, binaryPath, cmdArgs...)
 	configureBackgroundProcess(cmd)
 
@@ -568,20 +570,40 @@ func (s *CenterService) appendRunnerLogLocked(line string) {
 	}
 }
 
-func resolveLocalFrpcBinaryPath() (string, error) {
+func resolveTrustedRunnerBinaryPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("获取配置目录失败: %w", err)
 	}
 
-	path := filepath.Join(
+	installDir := filepath.Join(
 		configDir,
 		"LoliaShizuku",
 		"userdata",
 		"frpc",
 		"bin",
-		runnerFrpcBinaryName(),
 	)
+	binaryName := runnerFrpcBinaryName()
+	path := filepath.Clean(filepath.Join(installDir, binaryName))
+	expectedDir := filepath.Clean(installDir)
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("frpc 路径必须为绝对路径: %s", path)
+	}
+	if filepath.Base(path) != binaryName {
+		return "", fmt.Errorf("非法的 frpc 文件名: %s", path)
+	}
+	if filepath.Dir(path) != expectedDir {
+		return "", fmt.Errorf("非法的 frpc 安装目录: %s", path)
+	}
+
+	ok, err := fileExistsForRunner(path)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("frpc 未安装，请先在设置页面安装: %s", path)
+	}
+
 	return path, nil
 }
 
@@ -593,9 +615,15 @@ func runnerFrpcBinaryName() string {
 }
 
 func fileExistsForRunner(path string) (bool, error) {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err == nil {
-		return !info.IsDir(), nil
+		if info.Mode()&os.ModeSymlink != 0 {
+			return false, fmt.Errorf("runner 可执行文件不能是符号链接: %s", path)
+		}
+		if info.IsDir() {
+			return false, nil
+		}
+		return true, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil

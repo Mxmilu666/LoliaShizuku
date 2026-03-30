@@ -129,7 +129,9 @@ func (c *Client) DoJSON(
 	if err != nil {
 		return fmt.Errorf("request %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	payload, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {

@@ -4,7 +4,7 @@ type CenterServiceBinding = {
   GetTunnelsOverview: (page: number, limit: number, days: number) => Promise<any>;
   GetRunnerData: (tunnelID: number) => Promise<any>;
   GetTunnelDetail: (tunnelName: string) => Promise<any>;
-  StartRunner: (tunnelNames: string[]) => Promise<any>;
+  StartRunner: (tunnelNames: string[]) => Promise<RunnerRuntimeStatus>;
   StopRunner: () => Promise<any>;
   GetTrafficDaily: (days: number) => Promise<any>;
 };

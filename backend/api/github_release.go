@@ -50,7 +50,9 @@ func (a *GitHubReleaseAPI) GetLatestRelease(ctx context.Context, owner, repo str
 	if err != nil {
 		return nil, fmt.Errorf("request github latest release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("github latest release failed: status=%d", resp.StatusCode)
