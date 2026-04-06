@@ -60,6 +60,7 @@ wails build
 Token 存储在系统 Keyring（service: `LoliaShizuku`, key: `oauth_token`）
 
 默认 OAuth 回调地址为 `http://localhost:1145`。
+桌面端登录固定使用 Authorization Code + PKCE。
 
 ## 配置项（环境变量）
 
@@ -68,11 +69,9 @@ Token 存储在系统 Keyring（service: `LoliaShizuku`, key: `oauth_token`）
 | `LOLIA_CENTER_API_BASE_URL` | 中心 API 基地址 | `https://api.lolia.link/api/v1` |
 | `LOLIA_HTTP_USER_AGENT` | 自定义请求 UA | — |
 | `LOLIA_OAUTH_CLIENT_ID` | OAuth Client ID | — |
-| `LOLIA_OAUTH_CLIENT_SECRET` | OAuth Client Secret | — |
 | `LOLIA_OAUTH_AUTHORIZE_URL` | OAuth 授权地址 | `https://dash.lolia.link/oauth/authorize` |
 | `LOLIA_OAUTH_TOKEN_URL` | OAuth Token 地址 | `https://api.lolia.link/api/v1/oauth2/token` |
 | `LOLIA_OAUTH_REDIRECT_URL` | OAuth 回调地址 | `http://localhost:1145` |
-| `LOLIA_OAUTH_USE_PKCE` | 启用 PKCE（`0/false/no/off` 关闭） | 开启 |
 | `LOLIA_FRPC_REPO_OWNER` | frpc Release 仓库 Owner | `Lolia-FRP` |
 | `LOLIA_FRPC_REPO_NAME` | frpc Release 仓库名 | `lolia-frp` |
 

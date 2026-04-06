@@ -23,7 +23,6 @@ const (
 	defaultOAuthRedirectURL  = "http://localhost:1145"
 	defaultOAuthScope        = "all"
 	defaultOAuthClientID     = "mdn2kiogechzveez"
-	defaultOAuthClientSecret = "6xl6su3yamr70yzjzgwffa7b3lbc3371"
 
 	oauthAuthTimeout  = 3 * time.Minute
 	oauthTokenTimeout = 20 * time.Second
@@ -32,16 +31,6 @@ const (
 type oauthCallbackResult struct {
 	code string
 	err  error
-}
-
-func shouldUsePKCE() bool {
-	value := strings.TrimSpace(strings.ToLower(os.Getenv("LOLIA_OAUTH_USE_PKCE")))
-	switch value {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
 }
 
 func resolveOAuthConfig() (*oauth2.Config, error) {
@@ -65,16 +54,10 @@ func resolveOAuthConfig() (*oauth2.Config, error) {
 		redirectURL = defaultOAuthRedirectURL
 	}
 
-	clientSecret := strings.TrimSpace(os.Getenv("LOLIA_OAUTH_CLIENT_SECRET"))
-	if clientSecret == "" {
-		clientSecret = defaultOAuthClientSecret
-	}
-
 	return &oauth2.Config{
-		ClientID:     resolvedClientID,
-		ClientSecret: clientSecret,
-		RedirectURL:  redirectURL,
-		Scopes:       strings.Fields(defaultOAuthScope),
+		ClientID:    resolvedClientID,
+		RedirectURL: redirectURL,
+		Scopes:      strings.Fields(defaultOAuthScope),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   authorizeURL,
 			TokenURL:  tokenURL,
@@ -113,13 +96,9 @@ func beginOAuthLogin() error {
 		return err
 	}
 
-	usePKCE := shouldUsePKCE()
-	codeVerifier := ""
-	if usePKCE {
-		codeVerifier, err = randomURLSafeString(64)
-		if err != nil {
-			return err
-		}
+	codeVerifier, err := randomURLSafeString(64)
+	if err != nil {
+		return err
 	}
 
 	resultCh := make(chan oauthCallbackResult, 1)
@@ -197,9 +176,9 @@ func beginOAuthLogin() error {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	authCodeOptions := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
-	if usePKCE {
-		authCodeOptions = append(authCodeOptions, oauth2.S256ChallengeOption(codeVerifier))
+	authCodeOptions := []oauth2.AuthCodeOption{
+		oauth2.AccessTypeOffline,
+		oauth2.S256ChallengeOption(codeVerifier),
 	}
 
 	authURL := oauthCfg.AuthCodeURL(state, authCodeOptions...)
@@ -222,10 +201,7 @@ func beginOAuthLogin() error {
 	tokenCtx, cancel := context.WithTimeout(context.Background(), oauthTokenTimeout)
 	defer cancel()
 
-	exchangeOptions := []oauth2.AuthCodeOption{}
-	if usePKCE {
-		exchangeOptions = append(exchangeOptions, oauth2.VerifierOption(codeVerifier))
-	}
+	exchangeOptions := []oauth2.AuthCodeOption{oauth2.VerifierOption(codeVerifier)}
 
 	token, err := oauthCfg.Exchange(tokenCtx, result.code, exchangeOptions...)
 	if err != nil {
