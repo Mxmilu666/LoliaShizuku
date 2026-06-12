@@ -10,6 +10,10 @@ export function GetConfigPath() {
   return window['go']['backend']['App']['GetConfigPath']();
 }
 
+export function GetVersionInfo() {
+  return window['go']['backend']['App']['GetVersionInfo']();
+}
+
 export function Greet(arg1) {
   return window['go']['backend']['App']['Greet'](arg1);
 }

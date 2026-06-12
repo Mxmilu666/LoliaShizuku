@@ -24,6 +24,8 @@ import (
 	"github.com/Mxmilu666/LoliaShizuku/backend/api"
 	"github.com/Mxmilu666/LoliaShizuku/backend/httpclient"
 	"github.com/Mxmilu666/LoliaShizuku/backend/models"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -37,6 +39,16 @@ const (
 	mirrorModeOfficial = "official"
 	mirrorModeBuiltin  = "builtin"
 	mirrorModeCustom   = "custom"
+
+	frpcInstallProgressEvent = "frpc_install_progress"
+
+	installPhaseResolving   = "resolving"
+	installPhaseDownloading = "downloading"
+	installPhaseVerifying   = "verifying"
+	installPhaseExtracting  = "extracting"
+	installPhaseDone        = "done"
+
+	progressEmitInterval = 150 * time.Millisecond
 )
 
 type frpcInstallState struct {
@@ -115,6 +127,7 @@ func (s *FrpcService) InstallOrUpdateFrpc() (*models.FrpcInstallResult, error) {
 	}
 	defer s.endInstall()
 
+	s.emitInstallProgress(installPhaseResolving, 0, 0)
 	latest, err := s.resolveLatestRelease(ctx)
 	if err != nil {
 		return nil, normalizeInstallError(err)
@@ -129,11 +142,12 @@ func (s *FrpcService) InstallOrUpdateFrpc() (*models.FrpcInstallResult, error) {
 	}
 
 	archivePath := filepath.Join(paths.DownloadDir, latest.Asset.Name)
-	downloadedSHA256, err := s.downloadArchive(ctx, latest.Asset.DownloadURL, archivePath)
+	downloadedSHA256, err := s.downloadArchive(ctx, latest.Asset.DownloadURL, archivePath, latest.Asset.Size)
 	if err != nil {
 		return nil, normalizeInstallError(err)
 	}
 
+	s.emitInstallProgress(installPhaseVerifying, 0, 0)
 	expectedSHA256 := strings.ToLower(strings.TrimSpace(latest.Asset.SHA256))
 	if expectedSHA256 == "" {
 		return nil, fmt.Errorf("release asset digest is empty: %s", latest.Asset.Name)
@@ -142,6 +156,7 @@ func (s *FrpcService) InstallOrUpdateFrpc() (*models.FrpcInstallResult, error) {
 		return nil, fmt.Errorf("sha256 mismatch for %s: expected=%s actual=%s", latest.Asset.Name, expectedSHA256, downloadedSHA256)
 	}
 
+	s.emitInstallProgress(installPhaseExtracting, 0, 0)
 	binaryName := filepath.Base(paths.BinaryPath)
 	if err := extractBinaryFromArchive(archivePath, latest.Asset.ArchiveFormat, binaryName, paths.BinaryPath); err != nil {
 		return nil, normalizeInstallError(err)
@@ -169,6 +184,8 @@ func (s *FrpcService) InstallOrUpdateFrpc() (*models.FrpcInstallResult, error) {
 	if err != nil {
 		return nil, normalizeInstallError(err)
 	}
+
+	s.emitInstallProgress(installPhaseDone, latest.Asset.Size, latest.Asset.Size)
 
 	return &models.FrpcInstallResult{
 		Release: *latest,
@@ -385,7 +402,57 @@ func (s *FrpcService) paths() (models.FrpcPaths, error) {
 	}, nil
 }
 
-func (s *FrpcService) downloadArchive(ctx context.Context, url string, outputPath string) (string, error) {
+func (s *FrpcService) emitInstallProgress(phase string, downloaded, total int64) {
+	ctx := System().ctx
+	if ctx == nil {
+		return
+	}
+
+	percent := 0.0
+	if total > 0 {
+		percent = float64(downloaded) / float64(total) * 100
+		if percent > 100 {
+			percent = 100
+		}
+	}
+
+	wruntime.EventsEmit(ctx, frpcInstallProgressEvent, map[string]interface{}{
+		"phase":      phase,
+		"downloaded": downloaded,
+		"total":      total,
+		"percent":    percent,
+	})
+}
+
+type progressWriter struct {
+	total      int64
+	downloaded int64
+	lastPct    int
+	lastEmit   time.Time
+	onProgress func(downloaded, total int64)
+}
+
+func (w *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	w.downloaded += int64(n)
+
+	pct := -1
+	if w.total > 0 {
+		pct = int(w.downloaded * 100 / w.total)
+	}
+
+	now := time.Now()
+	if pct != w.lastPct || now.Sub(w.lastEmit) >= progressEmitInterval {
+		w.lastPct = pct
+		w.lastEmit = now
+		if w.onProgress != nil {
+			w.onProgress(w.downloaded, w.total)
+		}
+	}
+	return n, nil
+}
+
+func (s *FrpcService) downloadArchive(ctx context.Context, url string, outputPath string, expectedSize int64) (string, error) {
 	downloadCtx, cancel := context.WithTimeout(ctx, defaultFrpcDownloadTimeout)
 	defer cancel()
 
@@ -421,12 +488,28 @@ func (s *FrpcService) downloadArchive(ctx context.Context, url string, outputPat
 		return "", fmt.Errorf("create temp archive file: %w", err)
 	}
 
+	total := resp.ContentLength
+	if total <= 0 {
+		total = expectedSize
+	}
+
 	hasher := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(file, hasher), resp.Body); err != nil {
+	progress := &progressWriter{
+		total: total,
+		onProgress: func(downloaded, total int64) {
+			s.emitInstallProgress(installPhaseDownloading, downloaded, total)
+		},
+	}
+	s.emitInstallProgress(installPhaseDownloading, 0, total)
+
+	if _, err := io.Copy(io.MultiWriter(file, hasher, progress), resp.Body); err != nil {
 		_ = file.Close()
 		_ = os.Remove(tempPath)
 		return "", fmt.Errorf("write archive file: %w", err)
 	}
+
+	// Ensure a final 100% frame is delivered even if the last chunk was throttled.
+	s.emitInstallProgress(installPhaseDownloading, progress.downloaded, total)
 	if err := file.Close(); err != nil {
 		_ = os.Remove(tempPath)
 		return "", fmt.Errorf("close archive file: %w", err)

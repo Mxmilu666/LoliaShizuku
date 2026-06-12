@@ -837,3 +837,32 @@ export namespace models {
 
 }
 
+export namespace version {
+	
+	export class Info {
+	    app_name: string;
+	    version: string;
+	    git_commit: string;
+	    git_branch: string;
+	    build_time: string;
+	    go_version: string;
+	    platform: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.app_name = source["app_name"];
+	        this.version = source["version"];
+	        this.git_commit = source["git_commit"];
+	        this.git_branch = source["git_branch"];
+	        this.build_time = source["build_time"];
+	        this.go_version = source["go_version"];
+	        this.platform = source["platform"];
+	    }
+	}
+
+}
+

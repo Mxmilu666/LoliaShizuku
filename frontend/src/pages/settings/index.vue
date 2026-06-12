@@ -4,6 +4,9 @@ import { useRouter } from "vue-router";
 import { useTheme } from "vuetify";
 import { storeToRefs } from "pinia";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
+import { GetVersionInfo } from "../../../wailsjs/go/backend/App";
+import type { version } from "../../../wailsjs/go/models";
+import AppLogo from "@/components/AppLogo.vue";
 import { useGlobalLoadingStore } from "@/stores/globalLoading";
 import { useFrpcInstallStore } from "@/stores/frpcInstall";
 import {
@@ -67,8 +70,47 @@ const withGlobalLoading = <T>(task: () => Promise<T>) =>
   globalLoadingStore.withGlobalLoading(task);
 
 const frpcInstallStore = useFrpcInstallStore();
-const { installing, canceling } = storeToRefs(frpcInstallStore);
+const { installing, canceling, phase, downloaded, total, percent, indeterminate } =
+  storeToRefs(frpcInstallStore);
 const { startInstall, cancelInstall } = frpcInstallStore;
+
+const formatBytes = (bytes: number): string => {
+  if (!bytes || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const phaseLabel = computed(() => {
+  switch (phase.value) {
+    case "resolving":
+      return "正在获取最新版本…";
+    case "downloading":
+      return "正在下载…";
+    case "verifying":
+      return "正在校验文件…";
+    case "extracting":
+      return "正在解压安装…";
+    case "done":
+      return "安装完成";
+    default:
+      return "准备中…";
+  }
+});
+
+const progressDetail = computed(() => {
+  if (phase.value !== "downloading" || total.value <= 0) {
+    return "";
+  }
+  return `${formatBytes(downloaded.value)} / ${formatBytes(total.value)}`;
+});
 
 const showMessage = (
   text: string,
@@ -121,6 +163,63 @@ const actionText = computed(() => {
   return "重装 frpc";
 });
 
+const frpcInstalled = computed(() => !!status.value?.installed?.binary_exists);
+const updateAvailable = computed(() => !!status.value?.update_available);
+
+const frpcStatusChip = computed(() => {
+  if (!frpcInstalled.value) {
+    return { text: "未安装", color: "grey" };
+  }
+  if (status.value?.latest_error) {
+    return { text: "已安装", color: "success" };
+  }
+  if (updateAvailable.value) {
+    return { text: "可更新", color: "warning" };
+  }
+  return { text: "已是最新", color: "success" };
+});
+
+const installDetails = computed(() => [
+  { label: "当前版本", value: installedVersion.value, icon: "fas fa-tag" },
+  {
+    label: "二进制",
+    value: frpcInstalled.value ? "已安装" : "未安装",
+    icon: "fas fa-microchip",
+  },
+  {
+    label: "安装时间",
+    value: formatTime(status.value?.installed?.installed_at),
+    icon: "fas fa-clock",
+  },
+]);
+
+const pathItems = computed(() => {
+  const paths = status.value?.paths;
+  return [
+    { label: "userdata", value: paths?.userdata_dir },
+    { label: "frpc", value: paths?.frpc_dir },
+    { label: "bin", value: paths?.bin_dir },
+    { label: "binary", value: paths?.binary_path },
+    { label: "downloads", value: paths?.download_dir },
+    { label: "state", value: paths?.state_path },
+    { label: "settings", value: paths?.settings_path },
+  ];
+});
+
+const latestDetails = computed(() => [
+  { label: "最新标签", value: latestVersion.value, icon: "fas fa-tags" },
+  {
+    label: "发布时间",
+    value: formatTime(status.value?.latest?.published_at),
+    icon: "fas fa-calendar-day",
+  },
+  {
+    label: "可更新",
+    value: updateAvailable.value ? "是" : "否",
+    icon: "fas fa-arrow-up-from-bracket",
+  },
+]);
+
 const formatTime = (value?: string) => {
   if (!value) {
     return "-";
@@ -135,6 +234,76 @@ const formatTime = (value?: string) => {
 const openURL = (url: string) => {
   BrowserOpenURL(url);
 };
+
+const copyPath = async (value?: string) => {
+  if (!value) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    showMessage("已复制路径", "success");
+  } catch {
+    showMessage("复制失败", "error");
+  }
+};
+
+const versionInfo = ref<version.Info | null>(null);
+
+const loadVersionInfo = async () => {
+  try {
+    versionInfo.value = await GetVersionInfo();
+  } catch {
+    versionInfo.value = null;
+  }
+};
+
+const appVersion = computed(() => versionInfo.value?.version || "-");
+
+const aboutDetails = computed(() => {
+  const info = versionInfo.value;
+  if (!info) {
+    return [] as Array<{ label: string; value: string; icon: string }>;
+  }
+  const shortCommit =
+    info.git_commit && info.git_commit.length > 7
+      ? info.git_commit.slice(0, 7)
+      : info.git_commit || "-";
+  return [
+    { label: "版本", value: info.version || "-", icon: "fas fa-tag" },
+    { label: "提交", value: shortCommit, icon: "fas fa-code-commit" },
+    { label: "分支", value: info.git_branch || "-", icon: "fas fa-code-branch" },
+    { label: "构建时间", value: info.build_time || "-", icon: "fas fa-clock" },
+    { label: "平台", value: info.platform || "-", icon: "fas fa-desktop" },
+    { label: "Go", value: info.go_version || "-", icon: "fab fa-golang" },
+  ];
+});
+
+const aboutLinks = [
+  {
+    label: "项目仓库",
+    icon: "fab fa-github",
+    color: "primary",
+    url: "https://github.com/Mxmilu666/LoliaShizuku",
+  },
+  {
+    label: "Lolia 控制台",
+    icon: "fas fa-gauge-high",
+    color: "primary",
+    url: "https://dash.lolia.link",
+  },
+  {
+    label: "Lolia 官网",
+    icon: "fas fa-globe",
+    color: "secondary",
+    url: "https://lolia.link",
+  },
+  {
+    label: "Wails",
+    icon: "fas fa-book",
+    color: "secondary",
+    url: "https://wails.io",
+  },
+];
 
 const getSystemThemeName = (): "lightTheme" | "darkTheme" =>
   prefersDarkMedia?.matches ? "darkTheme" : "lightTheme";
@@ -351,6 +520,7 @@ onMounted(() => {
     prefersDarkMedia.addEventListener("change", handleSystemThemePreferenceChange);
   }
   void loadStatus();
+  void loadVersionInfo();
 });
 
 onBeforeUnmount(() => {
@@ -432,7 +602,34 @@ onBeforeUnmount(() => {
           </v-card-text>
 
           <v-card-text v-else-if="activePanel === 'frpc'" class="d-flex flex-column ga-4">
-            <div class="d-flex flex-wrap ga-3">
+            <v-sheet rounded="xl" class="frpc-hero pa-5 d-flex align-center flex-wrap ga-4">
+              <div class="flex-grow-1" style="min-width: 180px">
+                <div class="d-flex align-center flex-wrap ga-2">
+                  <span class="text-h6 font-weight-bold">frpc</span>
+                  <v-chip
+                    v-if="frpcInstalled"
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    rounded="pill"
+                    class="font-weight-medium"
+                  >
+                    {{ installedVersion }}
+                  </v-chip>
+                  <v-chip
+                    size="small"
+                    :color="frpcStatusChip.color"
+                    variant="flat"
+                    rounded="pill"
+                    class="font-weight-medium"
+                  >
+                    {{ frpcStatusChip.text }}
+                  </v-chip>
+                </div>
+                <div class="text-caption text-medium-emphasis mt-1">
+                  最新 {{ latestVersion }} · 发布 {{ formatTime(status?.latest?.published_at) }}
+                </div>
+              </div>
               <v-btn
                 color="primary"
                 :loading="installing"
@@ -442,6 +639,9 @@ onBeforeUnmount(() => {
                 <v-icon start>fas fa-download</v-icon>
                 {{ actionText }}
               </v-btn>
+            </v-sheet>
+
+            <div class="d-flex flex-wrap ga-2">
               <v-btn
                 color="warning"
                 variant="tonal"
@@ -472,6 +672,31 @@ onBeforeUnmount(() => {
               </v-btn>
             </div>
 
+            <v-sheet v-if="installing" border rounded="lg" class="pa-3 soft-card">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <span class="text-body-2">{{ phaseLabel }}</span>
+                <span
+                  v-if="progressDetail"
+                  class="text-caption text-medium-emphasis"
+                >
+                  {{ progressDetail }}
+                </span>
+              </div>
+              <v-progress-linear
+                :model-value="percent"
+                :indeterminate="indeterminate"
+                color="primary"
+                height="8"
+                rounded
+              />
+              <div
+                v-if="phase === 'downloading' && total > 0"
+                class="text-caption text-medium-emphasis mt-1 text-end"
+              >
+                {{ Math.floor(percent) }}%
+              </div>
+            </v-sheet>
+
             <v-alert
               v-if="status?.latest_error"
               type="warning"
@@ -484,59 +709,54 @@ onBeforeUnmount(() => {
 
             <v-row dense>
               <v-col cols="12" md="6">
-                <v-sheet border rounded="lg" class="pa-3">
-                  <div class="text-subtitle-2 mb-2">安装状态</div>
-                  <div class="text-body-2">当前版本：{{ installedVersion }}</div>
-                  <div class="text-body-2">
-                    二进制：{{ status?.installed?.binary_exists ? "已安装" : "未安装" }}
-                  </div>
-                  <div class="text-body-2">
-                    安装时间：{{ formatTime(status?.installed?.installed_at) }}
+                <v-sheet border rounded="lg" class="pa-4 soft-card h-100">
+                  <div class="text-subtitle-2 mb-3">安装状态</div>
+                  <div class="d-flex flex-column ga-3">
+                    <div
+                      v-for="detail in installDetails"
+                      :key="detail.label"
+                      class="d-flex align-center ga-3"
+                    >
+                      <v-icon
+                        :icon="detail.icon"
+                        size="14"
+                        color="medium-emphasis"
+                        class="frpc-detail-icon"
+                      />
+                      <span class="text-caption text-medium-emphasis">{{ detail.label }}</span>
+                      <span class="text-body-2 font-weight-medium ms-auto text-end">
+                        {{ detail.value }}
+                      </span>
+                    </div>
                   </div>
                 </v-sheet>
               </v-col>
               <v-col cols="12" md="6">
-                <v-sheet border rounded="lg" class="pa-3">
-                  <div class="text-subtitle-2 mb-2">最新版本</div>
-                  <div class="text-body-2">标签：{{ latestVersion }}</div>
-                  <div class="text-body-2">
-                    发布：{{ formatTime(status?.latest?.published_at) }}
-                  </div>
-                  <div class="text-body-2">
-                    可更新：{{ status?.update_available ? "是" : "否" }}
+                <v-sheet border rounded="lg" class="pa-4 soft-card h-100">
+                  <div class="text-subtitle-2 mb-3">最新版本</div>
+                  <div class="d-flex flex-column ga-3">
+                    <div
+                      v-for="detail in latestDetails"
+                      :key="detail.label"
+                      class="d-flex align-center ga-3"
+                    >
+                      <v-icon
+                        :icon="detail.icon"
+                        size="14"
+                        color="medium-emphasis"
+                        class="frpc-detail-icon"
+                      />
+                      <span class="text-caption text-medium-emphasis">{{ detail.label }}</span>
+                      <span class="text-body-2 font-weight-medium ms-auto text-end">
+                        {{ detail.value }}
+                      </span>
+                    </div>
                   </div>
                 </v-sheet>
               </v-col>
             </v-row>
 
-            <v-expansion-panels variant="accordion">
-              <v-expansion-panel>
-                <v-expansion-panel-title class="text-subtitle-2">
-                  本地目录
-                </v-expansion-panel-title>
-                <v-expansion-panel-text>
-                  <div class="text-body-2 text-wrap">
-                    userdata: {{ status?.paths.userdata_dir }}
-                  </div>
-                  <div class="text-body-2 text-wrap">frpc: {{ status?.paths.frpc_dir }}</div>
-                  <div class="text-body-2 text-wrap">bin: {{ status?.paths.bin_dir }}</div>
-                  <div class="text-body-2 text-wrap">
-                    binary: {{ status?.paths.binary_path }}
-                  </div>
-                  <div class="text-body-2 text-wrap">
-                    downloads: {{ status?.paths.download_dir }}
-                  </div>
-                  <div class="text-body-2 text-wrap">state: {{ status?.paths.state_path }}</div>
-                  <div class="text-body-2 text-wrap">
-                    settings: {{ status?.paths.settings_path }}
-                  </div>
-                </v-expansion-panel-text>
-              </v-expansion-panel>
-            </v-expansion-panels>
-
-            <v-divider />
-
-            <v-sheet border rounded="lg" class="pa-3 d-flex flex-column ga-3">
+            <v-sheet border rounded="lg" class="pa-4 d-flex flex-column ga-3 soft-card">
               <div class="text-subtitle-2">GitHub 下载源</div>
               <v-select
                 v-model="mirrorMode"
@@ -612,37 +832,103 @@ onBeforeUnmount(() => {
                 </v-btn>
               </div>
             </v-sheet>
+
+            <v-sheet border rounded="lg" class="pa-4 d-flex flex-column ga-3 soft-card">
+              <div class="text-subtitle-2">本地目录</div>
+              <div class="d-flex flex-column ga-1">
+                <div
+                  v-for="path in pathItems"
+                  :key="path.label"
+                  class="frpc-path-row"
+                >
+                  <span class="frpc-path-label text-caption text-medium-emphasis">
+                    {{ path.label }}
+                  </span>
+                  <code class="frpc-path-value" :title="path.value">
+                    {{ path.value || "-" }}
+                  </code>
+                  <v-btn
+                    icon="fas fa-copy"
+                    size="x-small"
+                    variant="text"
+                    density="comfortable"
+                    :disabled="!path.value"
+                    @click="copyPath(path.value)"
+                  />
+                </div>
+              </div>
+            </v-sheet>
           </v-card-text>
 
           <v-card-text v-else-if="activePanel === 'about'" class="d-flex flex-column ga-4">
-            <v-sheet border rounded="lg" class="pa-3 d-flex flex-column ga-2">
-              <div class="text-subtitle-2">LoliaShizuku</div>
-              <div class="text-body-2">
-                「ロリア・雫」由 Wails 驱动的 Lolia FRP 第三方客户端
+            <v-sheet rounded="xl" class="about-hero pa-6 d-flex align-center ga-5">
+              <div class="about-logo d-flex align-center justify-center">
+                <AppLogo :size="44" />
+              </div>
+              <div class="flex-grow-1">
+                <div class="d-flex align-center flex-wrap ga-2">
+                  <span class="text-h5 font-weight-bold">LoliaShizuku</span>
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="flat"
+                    rounded="pill"
+                    class="font-weight-medium"
+                  >
+                    v{{ appVersion }}
+                  </v-chip>
+                </div>
+                <div class="text-body-2 text-medium-emphasis mt-1">
+                  「ロリア・雫」由 Wails 驱动的 Lolia FRP 第三方客户端
+                </div>
               </div>
             </v-sheet>
 
-            <v-sheet border rounded="lg" class="pa-3 d-flex flex-column ga-2">
+            <v-sheet border rounded="lg" class="pa-4 soft-card">
+              <div class="text-subtitle-2 mb-3">构建信息</div>
+              <v-row dense>
+                <v-col
+                  v-for="detail in aboutDetails"
+                  :key="detail.label"
+                  cols="6"
+                  sm="4"
+                >
+                  <div class="d-flex align-center ga-2">
+                    <v-icon :icon="detail.icon" size="14" color="medium-emphasis" />
+                    <span class="text-caption text-medium-emphasis">{{ detail.label }}</span>
+                  </div>
+                  <div class="text-body-2 font-weight-medium mt-1 about-detail-value">
+                    {{ detail.value }}
+                  </div>
+                </v-col>
+              </v-row>
+              <div
+                v-if="aboutDetails.length === 0"
+                class="text-caption text-medium-emphasis"
+              >
+                无法获取构建信息。
+              </div>
+            </v-sheet>
+
+            <v-sheet border rounded="lg" class="pa-4 d-flex flex-column ga-3 soft-card">
               <div class="text-subtitle-2">相关链接</div>
               <div class="d-flex flex-wrap ga-2">
                 <v-btn
+                  v-for="link in aboutLinks"
+                  :key="link.url"
                   variant="tonal"
-                  color="primary"
-                  prepend-icon="fas fa-globe"
-                  @click="openURL('https://dash.lolia.link')"
+                  :color="link.color"
+                  :prepend-icon="link.icon"
+                  @click="openURL(link.url)"
                 >
-                  控制台
-                </v-btn>
-                <v-btn
-                  variant="tonal"
-                  color="secondary"
-                  prepend-icon="fas fa-book"
-                  @click="openURL('https://wails.io')"
-                >
-                  Wails
+                  {{ link.label }}
                 </v-btn>
               </div>
             </v-sheet>
+
+            <div class="text-caption text-medium-emphasis text-center">
+              以 MIT 许可证开源 · Made with ♥ by Mxmilu666
+            </div>
           </v-card-text>
 
           <v-card-text v-else class="d-flex flex-column ga-4">
@@ -679,5 +965,49 @@ onBeforeUnmount(() => {
 
 .settings-layout :deep(.v-card) {
   flex: 1;
+}
+
+.soft-card {
+  border-color: rgba(var(--v-theme-on-surface), 0.08) !important;
+}
+
+.about-logo {
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+  border-radius: 20px;
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.about-detail-value {
+  word-break: break-word;
+}
+
+.frpc-path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.frpc-path-label {
+  flex-shrink: 0;
+  width: 76px;
+}
+
+.frpc-path-value {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 </style>

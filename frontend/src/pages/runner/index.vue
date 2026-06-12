@@ -101,9 +101,13 @@ const formatRuntimeRemote = (tunnel: {
   if (customDomain) {
     return customDomain;
   }
+  const remote = (tunnel.remote || "").trim();
+  if (remote && remote !== "-") {
+    return remote;
+  }
   const runtimeNodeAddress = (runtimeStatus.value.node_address || "").trim();
   if (!runtimeNodeAddress) {
-    return tunnel.remote;
+    return remote || "-";
   }
   return joinHostPort(runtimeNodeAddress, tunnel.remotePort);
 };
@@ -199,7 +203,7 @@ const loadRunnerData = async () => {
       tunnels.value = tunnelList.map((item) => {
         const node = nodeMap.get(Number(item.node_id));
         const remoteHost = (item.node_address || "").trim() || node?.ip_address || "node";
-        const remotePort = item.remote_port || node?.frps_port || 0;
+        const remotePort = item.remote_port || 0;
         const customDomain = (item.custom_domain || "").trim();
 
         return {
@@ -208,7 +212,7 @@ const loadRunnerData = async () => {
           type: item.type || "-",
           customDomain,
           local: `${item.local_ip}:${item.local_port}`,
-          remote: customDomain || `${remoteHost}:${remotePort}`,
+          remote: customDomain || joinHostPort(remoteHost, remotePort),
           remotePort,
           status: statusToText(item.status),
           statusColor: statusToColor(item.status),

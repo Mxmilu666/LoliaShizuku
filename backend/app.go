@@ -6,6 +6,7 @@ import (
 
 	"github.com/Mxmilu666/LoliaShizuku/backend/config"
 	"github.com/Mxmilu666/LoliaShizuku/backend/services"
+	"github.com/Mxmilu666/LoliaShizuku/backend/version"
 )
 
 // App struct
@@ -68,4 +69,9 @@ func (a *App) GetConfigPath() string {
 // ResetConfig resets configuration to default values
 func (a *App) ResetConfig() error {
 	return a.configManager.ResetToDefaults()
+}
+
+// GetVersionInfo returns build/version metadata for the About page
+func (a *App) GetVersionInfo() version.Info {
+	return version.GetInfo()
 }
