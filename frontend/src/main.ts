@@ -4,7 +4,12 @@ import "vuetify/styles";
 import { createVuetify } from "vuetify";
 import { aliases, fa } from "vuetify/iconsets/fa";
 import { md3 } from "vuetify/blueprints";
-import { lightTheme, darkTheme } from "./plugins/theme";
+import {
+  lightTheme,
+  darkTheme,
+  applyAccentColors,
+  readSavedAccentId,
+} from "./plugins/theme";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 
@@ -45,6 +50,10 @@ const resolveThemeName = (mode: ThemeMode): "lightTheme" | "darkTheme" => {
   }
   return mode;
 };
+
+// Apply the saved accent before Vuetify reads the theme definitions so the
+// first paint already uses the chosen color.
+applyAccentColors({ lightTheme, darkTheme }, readSavedAccentId());
 
 const vuetify = createVuetify({
   components,

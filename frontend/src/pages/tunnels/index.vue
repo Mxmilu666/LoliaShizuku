@@ -199,48 +199,58 @@ onMounted(() => {
         sm="6"
         md="4"
       >
-        <v-card elevation="2" class="h-100 d-flex flex-column">
-          <v-card-title class="d-flex align-center justify-space-between">
-            <span class="text-subtitle-1 font-weight-bold">
-              {{ tunnel.remark }}
-            </span>
-            <v-chip
-              :color="getStatusColor(tunnel.status)"
-              class="rounded-pill"
-              size="small"
-            >
-              <v-icon start size="14">fas fa-circle</v-icon>
-              {{ getStatusText(tunnel.status) }}
-            </v-chip>
-          </v-card-title>
+        <v-card elevation="2" class="tunnel-card h-100 d-flex flex-column">
+          <v-card-item class="pb-2">
+            <div class="d-flex align-center justify-space-between ga-2">
+              <div class="min-w-0">
+                <div class="text-subtitle-1 font-weight-bold text-truncate">
+                  {{ tunnel.remark }}
+                </div>
+              </div>
+              <v-chip
+                :color="getStatusColor(tunnel.status)"
+                class="rounded-pill flex-shrink-0"
+                size="small"
+                variant="tonal"
+              >
+                <v-icon start size="10">fas fa-circle</v-icon>
+                {{ getStatusText(tunnel.status) }}
+              </v-chip>
+            </div>
+          </v-card-item>
 
-          <v-card-text class="d-flex flex-column ga-2 pt-0">
-            <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-server</v-icon>
-              <span class="text-caption">{{ tunnel.node_name }}</span>
+          <v-card-text class="d-flex flex-column ga-3 pt-0">
+            <div class="d-flex flex-column ga-1">
+              <div class="d-flex align-center ga-2">
+                <span class="tunnel-label text-caption text-medium-emphasis">本地</span>
+                <code class="tunnel-addr">{{ tunnel.local_ip }}:{{ tunnel.local_port }}</code>
+              </div>
+              <div class="d-flex align-center ga-2">
+                <span class="tunnel-label text-caption text-medium-emphasis">目标</span>
+                <code class="tunnel-addr" :title="getTunnelTarget(tunnel)">
+                  {{ getTunnelTarget(tunnel) }}
+                </code>
+              </div>
             </div>
 
-            <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-network-wired</v-icon>
-              <span class="text-caption">{{ tunnel.type.toUpperCase() }}</span>
+            <div class="d-flex flex-wrap ga-2">
+              <v-chip size="x-small" variant="tonal" color="primary" class="rounded-pill">
+                <v-icon start size="10">fas fa-network-wired</v-icon>
+                {{ tunnel.type.toUpperCase() }}
+              </v-chip>
+              <v-chip size="x-small" variant="tonal" class="rounded-pill">
+                <v-icon start size="10">fas fa-server</v-icon>
+                {{ tunnel.node_name }}
+              </v-chip>
             </div>
 
-            <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-earth-africa</v-icon>
-              <span class="text-caption">
-                {{ tunnel.local_ip }}:{{ tunnel.local_port }}
+            <div class="d-flex align-center ga-4 text-caption">
+              <span class="d-flex align-center ga-1">
+                <v-icon size="12" color="success">fas fa-arrow-down</v-icon>
+                {{ formatBytes(Number(tunnel.total_in ?? 0)) }}
               </span>
-            </div>
-
-            <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-arrow-right</v-icon>
-              <span class="text-caption">{{ getTunnelTarget(tunnel) }}</span>
-            </div>
-
-            <div class="d-flex align-center">
-              <v-icon size="14" class="me-2">fas fa-exchange-alt</v-icon>
-              <span class="text-caption">
-                ↓ {{ formatBytes(Number(tunnel.total_in ?? 0)) }} / ↑
+              <span class="d-flex align-center ga-1">
+                <v-icon size="12" color="info">fas fa-arrow-up</v-icon>
                 {{ formatBytes(Number(tunnel.total_out ?? 0)) }}
               </span>
             </div>
@@ -300,3 +310,26 @@ onMounted(() => {
     </v-row>
   </div>
 </template>
+
+<style scoped>
+.min-w-0 {
+  min-width: 0;
+}
+
+.tunnel-label {
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.tunnel-addr {
+  min-width: 0;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgb(var(--v-theme-on-surface));
+}
+</style>

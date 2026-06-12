@@ -7,6 +7,12 @@ import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 import { GetVersionInfo } from "../../../wailsjs/go/backend/App";
 import type { version } from "../../../wailsjs/go/models";
 import AppLogo from "@/components/AppLogo.vue";
+import {
+  accentPresets,
+  applyAccentColors,
+  readSavedAccentId,
+  saveAccentId,
+} from "@/plugins/theme";
 import { useGlobalLoadingStore } from "@/stores/globalLoading";
 import { useFrpcInstallStore } from "@/stores/frpcInstall";
 import {
@@ -44,6 +50,7 @@ const customMirrorMode = ref<CustomMirrorMode>("base");
 const customMirrorBaseURL = ref("");
 const customMirrorURLTemplate = ref("");
 const themeMode = ref<ThemeMode>("system");
+const accentId = ref(readSavedAccentId());
 const logoutLoading = ref(false);
 
 const themeStorageKey = "lolia.theme";
@@ -369,6 +376,17 @@ const handleThemeChange = (value: string | null) => {
   showMessage("主题已切换", "success");
 };
 
+const handleAccentChange = (id: string) => {
+  if (accentId.value === id) {
+    return;
+  }
+  accentId.value = id;
+  // Mutating the theme color maps triggers Vuetify to regenerate its CSS vars.
+  applyAccentColors(theme.themes.value, id);
+  saveAccentId(id);
+  showMessage("强调色已更新", "success");
+};
+
 const syncMirrorForm = (nextStatus: FrpcStatus) => {
   const config = nextStatus.mirror_config;
   mirrorMode.value = config?.mode || "official";
@@ -597,6 +615,30 @@ onBeforeUnmount(() => {
               />
               <div class="text-caption text-medium-emphasis">
                 支持跟随系统、浅色、深色模式，设置会自动保存到本地。
+              </div>
+            </v-sheet>
+
+            <v-sheet border rounded="lg" class="pa-3 d-flex flex-column ga-3 soft-card">
+              <div class="text-subtitle-2">强调色</div>
+              <div class="d-flex flex-wrap ga-3">
+                <button
+                  v-for="preset in accentPresets"
+                  :key="preset.id"
+                  type="button"
+                  class="accent-swatch"
+                  :class="{ 'accent-swatch--active': accentId === preset.id }"
+                  :style="{ background: preset.light }"
+                  :title="preset.name"
+                  :aria-label="preset.name"
+                  @click="handleAccentChange(preset.id)"
+                >
+                  <v-icon v-if="accentId === preset.id" size="16" color="white">
+                    fas fa-check
+                  </v-icon>
+                </button>
+              </div>
+              <div class="text-caption text-medium-emphasis">
+                强调色会应用到按钮、链接等主色元素，选择即时生效并保存到本地。
               </div>
             </v-sheet>
           </v-card-text>
@@ -982,6 +1024,28 @@ onBeforeUnmount(() => {
 
 .about-detail-value {
   word-break: break-word;
+}
+
+.accent-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.1s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.accent-swatch:hover {
+  transform: scale(1.1);
+}
+
+.accent-swatch--active {
+  border-color: rgb(var(--v-theme-on-surface));
 }
 
 .frpc-path-row {

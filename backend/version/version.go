@@ -9,7 +9,7 @@ import (
 // These variables are expected to be overridden by -ldflags during build.
 var (
 	AppName   = "LoliaShizuku"
-	Version   = "0.0.4"
+	Version   = "0.0.5"
 	GitCommit = "dev"
 	GitBranch = "dev"
 	BuildTime = "unknown"
