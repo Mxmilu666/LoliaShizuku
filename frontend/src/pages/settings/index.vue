@@ -133,7 +133,7 @@ const panelTitle = computed(() => {
     case "appearance":
       return "外观设置";
     case "frpc":
-      return "frps 管理";
+      return "frpc 管理";
     case "about":
       return "关于";
     case "account":
@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
             <v-list-subheader>设置菜单</v-list-subheader>
             <v-list-item
               prepend-icon="fas fa-cloud-arrow-down"
-              title="frps 管理"
+              title="frpc 管理"
               :active="activePanel === 'frpc'"
               @click="activePanel = 'frpc'"
             />
