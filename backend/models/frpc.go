@@ -1,19 +1,14 @@
 package models
 
-type GitHubRelease struct {
-	TagName     string               `json:"tag_name"`
-	Name        string               `json:"name"`
-	HTMLURL     string               `json:"html_url"`
-	PublishedAt string               `json:"published_at"`
-	Assets      []GitHubReleaseAsset `json:"assets"`
+type ClientVersionInfo struct {
+	Version string               `json:"version"`
+	Tag     string               `json:"tag"`
+	Assets  []ClientVersionAsset `json:"assets"`
 }
 
-type GitHubReleaseAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	Size               int64  `json:"size"`
-	ContentType        string `json:"content_type"`
-	Digest             string `json:"digest"`
+type ClientVersionAsset struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
 }
 
 type FrpcReleaseAsset struct {
@@ -29,11 +24,10 @@ type FrpcReleaseAsset struct {
 }
 
 type FrpcReleaseInfo struct {
-	TagName     string           `json:"tag_name"`
-	Name        string           `json:"name"`
-	HTMLURL     string           `json:"html_url"`
-	PublishedAt string           `json:"published_at"`
-	Asset       FrpcReleaseAsset `json:"asset"`
+	TagName string           `json:"tag_name"`
+	Name    string           `json:"name"`
+	HTMLURL string           `json:"html_url"`
+	Asset   FrpcReleaseAsset `json:"asset"`
 }
 
 type FrpcMirrorPreset struct {

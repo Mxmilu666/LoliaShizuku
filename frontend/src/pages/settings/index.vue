@@ -160,6 +160,29 @@ const builtinMirrorItems = computed(() =>
     },
   })),
 );
+const mirrorConfigDirty = computed(() => {
+  const saved = status.value?.mirror_config;
+  if (!saved) {
+    return false;
+  }
+
+  const savedMode = saved.mode || "official";
+  if (mirrorMode.value !== savedMode) {
+    return true;
+  }
+  if (mirrorMode.value === "builtin") {
+    return builtinMirrorPresetID.value !== (saved.preset_id || "");
+  }
+  if (mirrorMode.value === "custom") {
+    if (customMirrorMode.value === "template") {
+      return (
+        customMirrorURLTemplate.value.trim() !== (saved.custom_url_template || "")
+      );
+    }
+    return customMirrorBaseURL.value.trim() !== (saved.custom_base_url || "");
+  }
+  return false;
+});
 const actionText = computed(() => {
   if (!status.value?.installed?.binary_exists) {
     return "安装 frpc";
@@ -215,11 +238,6 @@ const pathItems = computed(() => {
 
 const latestDetails = computed(() => [
   { label: "最新标签", value: latestVersion.value, icon: "fas fa-tags" },
-  {
-    label: "发布时间",
-    value: formatTime(status.value?.latest?.published_at),
-    icon: "fas fa-calendar-day",
-  },
   {
     label: "可更新",
     value: updateAvailable.value ? "是" : "否",
@@ -669,7 +687,7 @@ onBeforeUnmount(() => {
                   </v-chip>
                 </div>
                 <div class="text-caption text-medium-emphasis mt-1">
-                  最新 {{ latestVersion }} · 发布 {{ formatTime(status?.latest?.published_at) }}
+                  最新 {{ latestVersion }}
                 </div>
               </div>
               <v-btn
@@ -855,6 +873,14 @@ onBeforeUnmount(() => {
               >
                 可用占位符：{owner}、{repo}、{tag}、{asset}
               </div>
+              <v-alert
+                v-if="mirrorConfigDirty"
+                type="warning"
+                variant="tonal"
+                density="compact"
+              >
+                下载源修改尚未保存，点击「保存设置」后生效。
+              </v-alert>
               <div class="d-flex flex-wrap ga-2">
                 <v-btn
                   color="primary"

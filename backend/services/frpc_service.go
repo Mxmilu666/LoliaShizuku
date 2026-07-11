@@ -85,7 +85,7 @@ var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
 }
 
 type FrpcService struct {
-	releaseAPI *api.GitHubReleaseAPI
+	versionAPI *api.ClientVersionAPI
 	httpClient *http.Client
 	repoOwner  string
 	repoName   string
@@ -106,8 +106,14 @@ func NewFrpcService() *FrpcService {
 		repoName = defaultFrpcRepoName
 	}
 
+	// 版本信息走中心 API 公开接口，无需携带 OAuth Token
+	versionClient := httpclient.New(httpclient.Options{
+		BaseURL:    centerAPIBaseURL(),
+		HTTPClient: client,
+	})
+
 	return &FrpcService{
-		releaseAPI: api.NewGitHubReleaseAPI(client, httpclient.ResolveUserAgent("")),
+		versionAPI: api.NewClientVersionAPI(versionClient),
 		httpClient: client,
 		repoOwner:  repoOwner,
 		repoName:   repoName,
@@ -332,9 +338,14 @@ func (s *FrpcService) buildStatus(
 }
 
 func (s *FrpcService) resolveLatestRelease(ctx context.Context) (*models.FrpcReleaseInfo, error) {
-	release, err := s.releaseAPI.GetLatestRelease(ctx, s.repoOwner, s.repoName)
+	release, err := s.versionAPI.GetLatestClientVersion(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	tag := strings.TrimSpace(release.Tag)
+	if tag == "" {
+		return nil, fmt.Errorf("client version tag is empty")
 	}
 
 	assetName, archiveFormat, err := releaseAssetName(runtime.GOOS, runtime.GOARCH)
@@ -342,7 +353,7 @@ func (s *FrpcService) resolveLatestRelease(ctx context.Context) (*models.FrpcRel
 		return nil, err
 	}
 
-	var selected *models.GitHubReleaseAsset
+	var selected *models.ClientVersionAsset
 	for i := range release.Assets {
 		asset := &release.Assets[i]
 		if strings.EqualFold(strings.TrimSpace(asset.Name), assetName) {
@@ -354,13 +365,20 @@ func (s *FrpcService) resolveLatestRelease(ctx context.Context) (*models.FrpcRel
 		return nil, fmt.Errorf("latest release does not contain asset %s", assetName)
 	}
 
-	sha256Digest := parseSHA256Digest(selected.Digest)
+	// 下载地址仍指向 GitHub Release，保持镜像重写规则可用
+	downloadURL := fmt.Sprintf(
+		"https://github.com/%s/%s/releases/download/%s/%s",
+		s.repoOwner,
+		s.repoName,
+		neturl.PathEscape(tag),
+		neturl.PathEscape(selected.Name),
+	)
+
+	sha256Digest := parseSHA256Digest(selected.Hash)
 	asset := models.FrpcReleaseAsset{
 		Name:          selected.Name,
-		DownloadURL:   selected.BrowserDownloadURL,
-		ContentType:   selected.ContentType,
-		Size:          selected.Size,
-		Digest:        selected.Digest,
+		DownloadURL:   downloadURL,
+		Digest:        selected.Hash,
 		SHA256:        sha256Digest,
 		OS:            runtime.GOOS,
 		Arch:          runtime.GOARCH,
@@ -368,11 +386,10 @@ func (s *FrpcService) resolveLatestRelease(ctx context.Context) (*models.FrpcRel
 	}
 
 	return &models.FrpcReleaseInfo{
-		TagName:     release.TagName,
-		Name:        release.Name,
-		HTMLURL:     release.HTMLURL,
-		PublishedAt: release.PublishedAt,
-		Asset:       asset,
+		TagName: tag,
+		Name:    strings.TrimSpace(release.Version),
+		HTMLURL: fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", s.repoOwner, s.repoName, neturl.PathEscape(tag)),
+		Asset:   asset,
 	}, nil
 }
 
