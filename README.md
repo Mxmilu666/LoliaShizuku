@@ -14,12 +14,12 @@
 
 ## 技术栈
 
-- 后端：Go 1.24、Wails v2、OAuth2、系统 Keyring
+- 后端：Go 1.25、Wails v2、OAuth2、系统 Keyring
 - 前端：Vue 3、TypeScript、Vuetify、Pinia、Vite
 
 ## 环境要求
 
-- Go `>= 1.24`
+- Go `>= 1.25`
 - Bun（用于前端依赖与构建）
 - Wails CLI
 

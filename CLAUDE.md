@@ -27,7 +27,7 @@ There is **no test suite** and no separate lint step in this repo. Use `go vet .
 
 ### Prerequisites
 
-- Go `>= 1.24`, Bun, and the Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`).
+- Go `>= 1.25`, Bun, and the Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`).
 - `CGO_ENABLED=1` is required for builds (WebView bindings) — see `.github/workflows/release.yml`.
 
 ## Architecture

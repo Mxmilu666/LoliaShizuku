@@ -444,7 +444,6 @@ export namespace models {
 	    tag_name: string;
 	    name: string;
 	    html_url: string;
-	    published_at: string;
 	    asset: FrpcReleaseAsset;
 	
 	    static createFrom(source: any = {}) {
@@ -456,7 +455,6 @@ export namespace models {
 	        this.tag_name = source["tag_name"];
 	        this.name = source["name"];
 	        this.html_url = source["html_url"];
-	        this.published_at = source["published_at"];
 	        this.asset = this.convertValues(source["asset"], FrpcReleaseAsset);
 	    }
 	
