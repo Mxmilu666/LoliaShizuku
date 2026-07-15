@@ -28,7 +28,7 @@
     "@mdi/font": "^7.4.47",
     "@types/node": "^25.2.3",
     "@vitejs/plugin-vue": "^6.0.4",
-    "daisyui": "^5.5.18",
+    "daisyui": "^5.5.19",
     "typescript": "^5.9.3",
     "unplugin-icons": "^23.0.1",
     "unplugin-vue-components": "^31.0.0",
