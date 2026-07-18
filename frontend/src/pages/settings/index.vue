@@ -50,6 +50,7 @@ const customMirrorMode = ref<CustomMirrorMode>("base");
 const customMirrorBaseURL = ref("");
 const customMirrorURLTemplate = ref("");
 const themeMode = ref<ThemeMode>("system");
+const showMirrorSwitchHint = ref(false);
 const accentId = ref(readSavedAccentId());
 const logoutLoading = ref(false);
 
@@ -433,6 +434,7 @@ const loadStatus = async () => {
 };
 
 const handleInstallOrUpdate = async () => {
+  showMirrorSwitchHint.value = false;
   try {
     await withGlobalLoading(async () => {
       const result = await startInstall();
@@ -446,6 +448,9 @@ const handleInstallOrUpdate = async () => {
       showMessage(message, "info");
       await loadStatus();
       return;
+    }
+    if (message.includes("下载失败") || message.includes("下载超时")) {
+      showMirrorSwitchHint.value = true;
     }
     showMessage(message, "error");
   }
@@ -508,6 +513,7 @@ const handleSaveMirrorConfig = async () => {
       }
 
       await setMirrorConfig(config);
+      showMirrorSwitchHint.value = false;
       showMessage("下载源设置已保存", "success");
       await loadStatus();
     } catch (error) {
@@ -756,6 +762,18 @@ onBeforeUnmount(() => {
                 {{ Math.floor(percent) }}%
               </div>
             </v-sheet>
+
+            <v-alert
+              v-model="showMirrorSwitchHint"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              closable
+              class="message-alert"
+            >
+              frpc 下载失败或超时，可能是当前下载源网络不佳，建议在下方「GitHub
+              下载源」中切换镜像后重试。
+            </v-alert>
 
             <v-alert
               v-if="status?.latest_error"

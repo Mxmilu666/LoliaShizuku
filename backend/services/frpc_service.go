@@ -65,6 +65,12 @@ type frpcUserSettings struct {
 
 var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
 	{
+		ID:          "milu",
+		Name:        "gh.milu.moe",
+		Description: "Milu GitHub 镜像",
+		BaseURL:     "https://cgh.milu.moe",
+	},
+	{
 		ID:          "akaere",
 		Name:        "cdn.akaere.online",
 		Description: "Akaere GitHub 路径镜像",
@@ -150,7 +156,7 @@ func (s *FrpcService) InstallOrUpdateFrpc() (*models.FrpcInstallResult, error) {
 	archivePath := filepath.Join(paths.DownloadDir, latest.Asset.Name)
 	downloadedSHA256, err := s.downloadArchive(ctx, latest.Asset.DownloadURL, archivePath, latest.Asset.Size)
 	if err != nil {
-		return nil, normalizeInstallError(err)
+		return nil, normalizeDownloadError(err)
 	}
 
 	s.emitInstallProgress(installPhaseVerifying, 0, 0)
@@ -1245,9 +1251,23 @@ func normalizeInstallError(err error) error {
 		return fmt.Errorf("frpc 下载已终止")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("frpc 下载超时，请稍后重试")
+		return fmt.Errorf("frpc 下载超时，可尝试切换下载源后重试")
 	}
 	return err
+}
+
+// normalizeDownloadError 专用于下载阶段的错误：除终止外，一律附带切换下载源的提示。
+func normalizeDownloadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return fmt.Errorf("frpc 下载已终止")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("frpc 下载超时，可尝试切换下载源后重试")
+	}
+	return fmt.Errorf("frpc 下载失败：%v，可尝试切换下载源后重试", err)
 }
 
 func removeIfExists(path string) error {
