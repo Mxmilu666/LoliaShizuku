@@ -68,7 +68,7 @@ var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
 		ID:          "milu",
 		Name:        "gh.milu.moe",
 		Description: "Milu GitHub 镜像",
-		BaseURL:     "https://cgh.milu.moe",
+		BaseURL:     "https://gh.milu.moe",
 	},
 	{
 		ID:          "akaere",
