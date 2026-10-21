@@ -1,3 +1,5 @@
+import { FrpcService } from "../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services";
+
 type FrpcServiceBinding = {
   GetFrpcStatus: () => Promise<any>;
   GetGitHubMirrorURL: () => Promise<string>;
@@ -9,11 +11,7 @@ type FrpcServiceBinding = {
 };
 
 function getFrpcServiceBinding(): FrpcServiceBinding {
-  const svc = (window as any).go?.services?.FrpcService;
-  if (!svc) {
-    throw new Error("FrpcService 未绑定，请重启应用。");
-  }
-  return svc as FrpcServiceBinding;
+  return FrpcService as unknown as FrpcServiceBinding;
 }
 
 function parseError(error: unknown): Error {

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
+import { Events } from "@wailsio/runtime";
 import {
   cancelInstallOrUpdateFrpc,
   installOrUpdateFrpc,
@@ -60,7 +60,8 @@ export const useFrpcInstallStore = defineStore("frpcInstall", {
       this.resetProgress();
       this.phase = "resolving";
 
-      EventsOn(PROGRESS_EVENT, (payload: ProgressPayload) => {
+      const offProgress = Events.On(PROGRESS_EVENT, (event) => {
+        const payload = event.data as ProgressPayload | undefined;
         if (!payload) {
           return;
         }
@@ -74,7 +75,7 @@ export const useFrpcInstallStore = defineStore("frpcInstall", {
         try {
           return await installOrUpdateFrpc();
         } finally {
-          EventsOff(PROGRESS_EVENT);
+          offProgress();
           this.installing = false;
           this.canceling = false;
           this.runningPromise = null;
