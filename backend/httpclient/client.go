@@ -163,8 +163,8 @@ func (c *Client) DoJSON(
 		message = strings.TrimSpace(string(payload))
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden ||
-		businessCode == http.StatusUnauthorized || businessCode == http.StatusForbidden {
+	// 仅 401 视为登录失效；403 在中心端用于业务限制（如隧道数量上限、未绑定 QQ），不应清除 Token
+	if resp.StatusCode == http.StatusUnauthorized || businessCode == http.StatusUnauthorized {
 		if c.onUnauthorized != nil {
 			_ = c.onUnauthorized(ctx)
 		}
@@ -186,7 +186,8 @@ func (c *Client) DoJSON(
 		}
 	}
 
-	if businessCode != 0 && businessCode != 200 {
+	// 中心端以 HTTP 状态码作为业务码，2xx（如创建成功的 201）均视为成功
+	if businessCode != 0 && (businessCode < 200 || businessCode >= 300) {
 		return &APIError{
 			Path:       path,
 			StatusCode: resp.StatusCode,

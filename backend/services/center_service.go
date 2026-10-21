@@ -1,17 +1,11 @@
 package services
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -28,13 +22,11 @@ const (
 	runnerStopTimeout       = 3 * time.Second
 )
 
-var runnerTokenArgPattern = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9._~+/=-]+$`)
-
 type CenterService struct {
 	api *api.CenterAPI
 
 	runnerMu          sync.Mutex
-	runnerCmd         *exec.Cmd
+	runner            runnerPlatformState
 	runnerCancel      context.CancelFunc
 	runnerStartedAt   time.Time
 	runnerTunnelName  string
@@ -234,10 +226,20 @@ func (s *CenterService) GetRunnerData(tunnelID int64) (*models.RunnerData, error
 	}, nil
 }
 
-func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntimeStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultHTTPTimeout)
-	defer cancel()
+// runnerTarget 是一条待启动隧道的运行参数
+type runnerTarget struct {
+	ID          int64
+	Name        string
+	Token       string
+	NodeAddress string
+}
 
+// prepareRunnerStart 处理与已运行隧道的合并、默认隧道选择，并获取各隧道详情。
+// 返回 nil targets 表示请求的隧道均已在运行，调用方应直接返回 currentStatus。
+func (s *CenterService) prepareRunnerStart(
+	ctx context.Context,
+	tunnelNames []string,
+) ([]runnerTarget, *models.RunnerRuntimeStatus, error) {
 	selectedTunnelNames := normalizeTunnelNames(tunnelNames)
 	s.runnerMu.Lock()
 	currentlyRunning := s.isRunnerRunningLocked()
@@ -251,10 +253,10 @@ func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntime
 	if currentlyRunning {
 		mergedTunnelNames := mergeTunnelNames(existingTunnelNames, selectedTunnelNames)
 		if len(mergedTunnelNames) == len(existingTunnelNames) {
-			return currentStatus, nil
+			return nil, currentStatus, nil
 		}
 		if _, err := s.StopRunner(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		selectedTunnelNames = mergedTunnelNames
 	}
@@ -262,163 +264,43 @@ func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntime
 	if len(selectedTunnelNames) == 0 {
 		tunnels, err := s.api.GetUserTunnels(ctx, 1, 100)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(tunnels.List) == 0 {
-			return nil, fmt.Errorf("当前账号暂无隧道，无法启动 frpc")
+			return nil, nil, fmt.Errorf("当前账号暂无隧道，无法启动 frpc")
 		}
 		selectedTunnelNames = []string{strings.TrimSpace(tunnels.List[0].Name)}
 	}
 	if len(selectedTunnelNames) == 0 {
-		return nil, fmt.Errorf("无效的隧道名称")
+		return nil, nil, fmt.Errorf("无效的隧道名称")
 	}
 
-	tokenArgs := make([]string, 0, len(selectedTunnelNames))
-	resolvedTunnelNames := make([]string, 0, len(selectedTunnelNames))
-	nodeAddresses := make([]string, 0, len(selectedTunnelNames))
+	targets := make([]runnerTarget, 0, len(selectedTunnelNames))
 	for _, selectedTunnelName := range selectedTunnelNames {
 		tunnelDetail, err := s.api.GetTunnelDetail(ctx, selectedTunnelName)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if tunnelDetail == nil {
-			return nil, fmt.Errorf("获取隧道详情失败：%s", selectedTunnelName)
+			return nil, nil, fmt.Errorf("获取隧道详情失败：%s", selectedTunnelName)
 		}
 		if tunnelDetail.ID <= 0 {
-			return nil, fmt.Errorf("隧道详情缺少有效 id：%s", selectedTunnelName)
+			return nil, nil, fmt.Errorf("隧道详情缺少有效 id：%s", selectedTunnelName)
 		}
 
 		token := strings.TrimSpace(tunnelDetail.TunnelToken)
 		if token == "" {
-			return nil, fmt.Errorf("隧道详情未返回 tunnel_token：%s", selectedTunnelName)
+			return nil, nil, fmt.Errorf("隧道详情未返回 tunnel_token：%s", selectedTunnelName)
 		}
 
-		tokenArgs = append(tokenArgs, fmt.Sprintf("%d:%s", tunnelDetail.ID, token))
-		resolvedTunnelNames = append(resolvedTunnelNames, strings.TrimSpace(tunnelDetail.Name))
-		nodeAddresses = append(nodeAddresses, strings.TrimSpace(tunnelDetail.NodeAddress))
+		targets = append(targets, runnerTarget{
+			ID:          tunnelDetail.ID,
+			Name:        strings.TrimSpace(tunnelDetail.Name),
+			Token:       token,
+			NodeAddress: strings.TrimSpace(tunnelDetail.NodeAddress),
+		})
 	}
-
-	binaryPath, err := resolveTrustedRunnerBinaryPath()
-	if err != nil {
-		return nil, err
-	}
-
-	s.runnerMu.Lock()
-	if s.isRunnerRunningLocked() {
-		status := s.buildRunnerStatusLocked()
-		s.runnerMu.Unlock()
-		return status, fmt.Errorf("runner 已在运行中")
-	}
-
-	runCtx, runCancel := context.WithCancel(context.Background())
-	cmdArgs := make([]string, 0, len(tokenArgs)*2)
-	for _, tokenArg := range tokenArgs {
-		if !runnerTokenArgPattern.MatchString(tokenArg) {
-			runCancel()
-			s.runnerMu.Unlock()
-			return nil, fmt.Errorf("非法的 tunnel token 参数")
-		}
-		cmdArgs = append(cmdArgs, "-t", tokenArg)
-	}
-	// #nosec G204 -- binaryPath is constrained to the managed frpc install path and cmdArgs are validated token arguments.
-	cmd := exec.CommandContext(runCtx, binaryPath, cmdArgs...)
-	configureBackgroundProcess(cmd)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		runCancel()
-		s.runnerMu.Unlock()
-		return nil, fmt.Errorf("打开 frpc stdout 失败: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		runCancel()
-		s.runnerMu.Unlock()
-		return nil, fmt.Errorf("打开 frpc stderr 失败: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		runCancel()
-		s.runnerMu.Unlock()
-		return nil, fmt.Errorf("启动 frpc 失败: %w", err)
-	}
-
-	s.runnerCmd = cmd
-	s.runnerCancel = runCancel
-	s.runnerStartedAt = time.Now().UTC()
-	s.runnerTunnelName = firstNonEmptyString(resolvedTunnelNames...)
-	s.runnerTunnelNames = append([]string(nil), resolvedTunnelNames...)
-	s.runnerNodeAddress = firstNonEmptyString(nodeAddresses...)
-	s.runnerCommand = buildMaskedRunnerCommand(binaryPath, tokenArgs)
-	s.runnerLastError = ""
-	s.runnerLogs = []string{
-		fmt.Sprintf("[runner] started: pid=%d", cmd.Process.Pid),
-	}
-	s.runnerStopping = false
-	status := s.buildRunnerStatusLocked()
-	s.runnerMu.Unlock()
-
-	go s.consumeRunnerOutput(stdout)
-	go s.consumeRunnerOutput(stderr)
-	go s.waitRunnerExit(cmd)
-
-	return status, nil
-}
-
-func (s *CenterService) StopRunner() (*models.RunnerRuntimeStatus, error) {
-	s.runnerMu.Lock()
-	if !s.isRunnerRunningLocked() {
-		status := s.buildRunnerStatusLocked()
-		s.runnerMu.Unlock()
-		return status, nil
-	}
-
-	cmd := s.runnerCmd
-	cancel := s.runnerCancel
-	s.runnerStopping = true
-	s.runnerMu.Unlock()
-
-	if cancel != nil {
-		cancel()
-	}
-	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Signal(os.Interrupt)
-	}
-
-	deadline := time.Now().Add(runnerStopTimeout)
-	for time.Now().Before(deadline) {
-		time.Sleep(100 * time.Millisecond)
-		s.runnerMu.Lock()
-		running := s.isRunnerRunningLocked()
-		s.runnerMu.Unlock()
-		if !running {
-			break
-		}
-	}
-
-	s.runnerMu.Lock()
-	shouldKill := s.isRunnerRunningLocked() && cmd != nil && cmd.Process != nil
-	s.runnerMu.Unlock()
-
-	if shouldKill {
-		_ = cmd.Process.Kill()
-	}
-
-	deadline = time.Now().Add(runnerStopTimeout)
-	for time.Now().Before(deadline) {
-		time.Sleep(100 * time.Millisecond)
-		s.runnerMu.Lock()
-		running := s.isRunnerRunningLocked()
-		s.runnerMu.Unlock()
-		if !running {
-			break
-		}
-	}
-
-	s.runnerMu.Lock()
-	status := s.buildRunnerStatusLocked()
-	s.runnerMu.Unlock()
-	return status, nil
+	return targets, currentStatus, nil
 }
 
 func (s *CenterService) GetRunnerRuntimeStatus() (*models.RunnerRuntimeStatus, error) {
@@ -462,6 +344,166 @@ func (s *CenterService) GetTunnelDetail(tunnelName string) (*models.TunnelDetail
 	return s.api.GetTunnelDetail(context.Background(), tunnelName)
 }
 
+// GetTunnelsPage 聚合隧道页面所需数据：隧道列表、配额、节点与近 days 天流量
+func (s *CenterService) GetTunnelsPage(days int) (*models.TunnelsPageData, error) {
+	ctx := context.Background()
+
+	var (
+		wg         sync.WaitGroup
+		tunnelList *models.TunnelListData
+		tunnelErr  error
+		userInfo   *models.UserInfoData
+		nodes      *models.NodeListData
+		traffic    *models.TrafficTunnelData
+	)
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		tunnelList, tunnelErr = s.api.GetUserTunnels(ctx, 1, 100)
+	}()
+	go func() {
+		defer wg.Done()
+		userInfo, _ = s.api.GetUserInfo(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		nodes, _ = s.api.GetNodes(ctx)
+	}()
+	if days > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			traffic, _ = s.api.GetTrafficTunnels(ctx, days)
+		}()
+	}
+	wg.Wait()
+
+	if tunnelErr != nil {
+		return nil, tunnelErr
+	}
+
+	trafficByName := map[string]models.TrafficTunnelItem{}
+	if traffic != nil {
+		for _, item := range traffic.Tunnels {
+			trafficByName[strings.TrimSpace(item.TunnelName)] = item
+		}
+	}
+	nodeMetaByID := map[int64]models.NodeItem{}
+	var nodeItems []models.NodeItem
+	if nodes != nil {
+		nodeItems = nodes.Nodes
+		for _, node := range nodes.Nodes {
+			nodeMetaByID[node.ID] = node
+		}
+	}
+
+	tunnels := enrichTunnelNodeMeta(tunnelList.List, nodeMetaByID)
+	for i := range tunnels {
+		if item, ok := trafficByName[strings.TrimSpace(tunnels[i].Name)]; ok {
+			tunnels[i].TotalIn = item.TotalIn
+			tunnels[i].TotalOut = item.TotalOut
+			tunnels[i].TotalTraffic = item.TotalTraffic
+		}
+	}
+
+	data := &models.TunnelsPageData{
+		Tunnels:     tunnels,
+		Total:       tunnelList.Total,
+		Nodes:       nodeItems,
+		TrafficDays: days,
+	}
+	if userInfo != nil {
+		data.MaxTunnelCount = userInfo.MaxTunnelCount
+	}
+	return data, nil
+}
+
+func (s *CenterService) CreateTunnel(req models.CreateTunnelRequest) (*models.TunnelItem, error) {
+	tunnel, err := s.api.CreateTunnel(context.Background(), req)
+	return tunnel, apiMessageError(err)
+}
+
+func (s *CenterService) UpdateTunnel(tunnelName string, req models.UpdateTunnelRequest) (*models.TunnelItem, error) {
+	tunnel, err := s.api.UpdateTunnel(context.Background(), tunnelName, req)
+	return tunnel, apiMessageError(err)
+}
+
+// DeleteTunnel 删除隧道；隧道正在本地运行时拒绝删除，避免 frpc 持续重连
+func (s *CenterService) DeleteTunnel(tunnelName string) error {
+	name := strings.TrimSpace(tunnelName)
+
+	s.runnerMu.Lock()
+	running := s.isRunnerRunningLocked()
+	inUse := strings.TrimSpace(s.runnerTunnelName) == name
+	for _, item := range s.runnerTunnelNames {
+		if strings.TrimSpace(item) == name {
+			inUse = true
+			break
+		}
+	}
+	s.runnerMu.Unlock()
+
+	if running && inUse {
+		return fmt.Errorf("隧道正在本地运行，请先停止后再删除")
+	}
+	return apiMessageError(s.api.DeleteTunnel(context.Background(), name))
+}
+
+// apiMessageError 将中心端返回的业务错误转换为可直接展示给用户的提示
+func apiMessageError(err error) error {
+	var apiErr *httpclient.APIError
+	if errors.As(err, &apiErr) && strings.TrimSpace(apiErr.Message) != "" {
+		return errors.New(strings.TrimSpace(apiErr.Message))
+	}
+	return err
+}
+
+func (s *CenterService) GetTunnelRealtimeTraffic(tunnelName string) (*models.TunnelRealtimeTraffic, error) {
+	return s.api.GetTunnelRealtimeTraffic(context.Background(), tunnelName)
+}
+
+func (s *CenterService) GetUserDomains() (*models.DomainListData, error) {
+	return s.api.GetUserDomains(context.Background())
+}
+
+// GetHomeAnnouncements 并行获取首页的置顶公告与公告板
+func (s *CenterService) GetHomeAnnouncements() (*models.HomeAnnouncements, error) {
+	ctx := context.Background()
+
+	var (
+		wg               sync.WaitGroup
+		top, board       *models.AnnouncementListData
+		topErr, boardErr error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		top, topErr = s.api.GetAnnouncements(ctx, "top")
+	}()
+	go func() {
+		defer wg.Done()
+		board, boardErr = s.api.GetAnnouncements(ctx, "board")
+	}()
+	wg.Wait()
+
+	if topErr != nil && boardErr != nil {
+		return nil, apiMessageError(topErr)
+	}
+
+	result := &models.HomeAnnouncements{
+		Top:   []models.Announcement{},
+		Board: []models.Announcement{},
+	}
+	if top != nil && top.Items != nil {
+		result.Top = top.Items
+	}
+	if board != nil && board.Items != nil {
+		result.Board = board.Items
+	}
+	return result, nil
+}
+
 func (s *CenterService) GetClientVersion() (*models.AppVersionInfo, error) {
 	return s.api.GetClientVersion(context.Background())
 }
@@ -491,16 +533,6 @@ func enrichTunnelNodeMeta(tunnels []models.TunnelItem, nodeMetaByID map[int64]mo
 	return enriched
 }
 
-func (s *CenterService) isRunnerRunningLocked() bool {
-	if s.runnerCmd == nil || s.runnerCmd.Process == nil {
-		return false
-	}
-	if s.runnerCmd.ProcessState == nil {
-		return true
-	}
-	return !s.runnerCmd.ProcessState.Exited()
-}
-
 func (s *CenterService) buildRunnerStatusLocked() *models.RunnerRuntimeStatus {
 	status := &models.RunnerRuntimeStatus{
 		Running:     s.isRunnerRunningLocked(),
@@ -514,53 +546,11 @@ func (s *CenterService) buildRunnerStatusLocked() *models.RunnerRuntimeStatus {
 	if !s.runnerStartedAt.IsZero() {
 		status.StartedAt = s.runnerStartedAt.Format(time.RFC3339)
 	}
-	if s.runnerCmd != nil && s.runnerCmd.Process != nil {
-		status.PID = s.runnerCmd.Process.Pid
-	}
+	status.PID = s.runnerPIDLocked()
 	if len(s.runnerLogs) > 0 {
 		status.LogLines = append([]string(nil), s.runnerLogs...)
 	}
 	return status
-}
-
-func (s *CenterService) waitRunnerExit(cmd *exec.Cmd) {
-	err := cmd.Wait()
-
-	s.runnerMu.Lock()
-	defer s.runnerMu.Unlock()
-
-	wasStopping := s.runnerStopping
-	s.runnerStopping = false
-
-	if err != nil && !wasStopping && !errors.Is(err, context.Canceled) {
-		s.runnerLastError = err.Error()
-		s.appendRunnerLogLocked("[runner] exited with error: " + err.Error())
-	} else {
-		s.appendRunnerLogLocked("[runner] exited")
-	}
-
-	if s.runnerCmd == cmd {
-		s.runnerCmd = nil
-	}
-	s.runnerCancel = nil
-}
-
-func (s *CenterService) consumeRunnerOutput(reader io.Reader) {
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		s.runnerMu.Lock()
-		s.appendRunnerLogLocked(line)
-		s.runnerMu.Unlock()
-	}
-	if err := scanner.Err(); err != nil {
-		s.runnerMu.Lock()
-		s.appendRunnerLogLocked("[runner] log read error: " + err.Error())
-		s.runnerMu.Unlock()
-	}
 }
 
 func (s *CenterService) appendRunnerLogLocked(line string) {
@@ -568,97 +558,6 @@ func (s *CenterService) appendRunnerLogLocked(line string) {
 	if len(s.runnerLogs) > runnerLogMaxLines {
 		s.runnerLogs = append([]string(nil), s.runnerLogs[len(s.runnerLogs)-runnerLogMaxLines:]...)
 	}
-}
-
-func resolveTrustedRunnerBinaryPath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("获取配置目录失败: %w", err)
-	}
-
-	installDir := filepath.Join(
-		configDir,
-		"LoliaShizuku",
-		"userdata",
-		"frpc",
-		"bin",
-	)
-	binaryName := runnerFrpcBinaryName()
-	path := filepath.Clean(filepath.Join(installDir, binaryName))
-	expectedDir := filepath.Clean(installDir)
-	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("frpc 路径必须为绝对路径: %s", path)
-	}
-	if filepath.Base(path) != binaryName {
-		return "", fmt.Errorf("非法的 frpc 文件名: %s", path)
-	}
-	if filepath.Dir(path) != expectedDir {
-		return "", fmt.Errorf("非法的 frpc 安装目录: %s", path)
-	}
-
-	ok, err := fileExistsForRunner(path)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", fmt.Errorf("frpc 未安装，请先在设置页面安装: %s", path)
-	}
-
-	return path, nil
-}
-
-func runnerFrpcBinaryName() string {
-	if runtime.GOOS == "windows" {
-		return "frpc.exe"
-	}
-	return "frpc"
-}
-
-func fileExistsForRunner(path string) (bool, error) {
-	info, err := os.Lstat(path)
-	if err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return false, fmt.Errorf("runner 可执行文件不能是符号链接: %s", path)
-		}
-		if info.IsDir() {
-			return false, nil
-		}
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, fmt.Errorf("检查文件失败 %s: %w", path, err)
-}
-
-func maskRunnerTokenArg(tokenArg string) string {
-	parts := strings.SplitN(tokenArg, ":", 2)
-	if len(parts) != 2 {
-		return tokenArg
-	}
-
-	token := strings.TrimSpace(parts[1])
-	if token == "" {
-		return parts[0] + ":***"
-	}
-	if len(token) <= 8 {
-		return parts[0] + ":***"
-	}
-
-	return fmt.Sprintf("%s:%s***%s", parts[0], token[:4], token[len(token)-4:])
-}
-
-func buildMaskedRunnerCommand(binaryPath string, tokenArgs []string) string {
-	if len(tokenArgs) == 0 {
-		return binaryPath
-	}
-
-	parts := make([]string, 0, 1+len(tokenArgs)*2)
-	parts = append(parts, binaryPath)
-	for _, tokenArg := range tokenArgs {
-		parts = append(parts, "-t", maskRunnerTokenArg(tokenArg))
-	}
-	return strings.Join(parts, " ")
 }
 
 func normalizeTunnelNames(tunnelNames []string) []string {
