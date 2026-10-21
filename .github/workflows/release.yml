@@ -52,12 +52,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -69,7 +69,7 @@ jobs:
       # Bun 在 windows-arm64 runner 上不可用，改用 npm 构建前端
       - name: Setup Node (windows-arm64)
         if: matrix.name == 'windows-arm64'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -94,8 +94,9 @@ jobs:
 
       - name: Install Wails CLI
         shell: bash
+        # CLI 本身无需 cgo；开启时在 Linux 上会依赖 GTK4 / WebKitGTK 6.0 开发包
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Verify NSIS (Windows)
@@ -251,7 +252,7 @@ jobs:
           exit 1
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.name }}
           path: |
@@ -264,12 +265,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -279,15 +280,16 @@ jobs:
 
       # Gradle 9.2 只能运行在 JDK 17–25 上
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Install Wails CLI
         shell: bash
+        # CLI 本身无需 cgo；开启时在 Linux 上会依赖 GTK4 / WebKitGTK 6.0 开发包
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # GitHub 托管的 ubuntu runner 已预装 Android SDK 与 NDK（ANDROID_HOME / ANDROID_NDK_HOME），
@@ -351,7 +353,7 @@ jobs:
           cp bin/LoliaShizuku.apk "dist/LoliaShizuku${REF_PART}-android-arm64.apk"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-android-arm64
           path: dist/*
@@ -367,7 +369,7 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
