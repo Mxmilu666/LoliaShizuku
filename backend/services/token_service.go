@@ -3,8 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-
-	"github.com/zalando/go-keyring"
 )
 
 // TokenService exposes token helpers to the frontend via Wails binding.
@@ -22,7 +20,7 @@ func (s *TokenService) HasOAuthToken() (bool, error) {
 	if err == nil {
 		return token != nil, nil
 	}
-	if errors.Is(err, keyring.ErrNotFound) {
+	if errors.Is(err, errSecretNotFound) {
 		return false, nil
 	}
 	return false, err

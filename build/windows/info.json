@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
+		"file_version": "0.0.9"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
+			"ProductVersion": "0.0.9",
+			"CompanyName": "Mxmilu666",
+			"FileDescription": "LoliaShizuku desktop client for Lolia FRP",
+			"LegalCopyright": "© 2026, Mxmilu666",
+			"ProductName": "LoliaShizuku",
+			"Comments": "Lolia FRP 第三方桌面客户端"
 		}
 	}
 }

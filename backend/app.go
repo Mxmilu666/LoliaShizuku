@@ -7,11 +7,12 @@ import (
 	"github.com/Mxmilu666/LoliaShizuku/backend/config"
 	"github.com/Mxmilu666/LoliaShizuku/backend/services"
 	"github.com/Mxmilu666/LoliaShizuku/backend/version"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // App struct
 type App struct {
-	ctx           context.Context
 	configManager *config.Manager
 }
 
@@ -30,11 +31,8 @@ func NewApp(configManager *config.Manager) *App {
 	}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (a *App) Startup(ctx context.Context) {
-	a.ctx = ctx
-
+// ServiceStartup is called by Wails when the application starts.
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	// Initialize configuration if not already done
 	if !a.configManager.IsInitialized() {
 		if err := a.configManager.Initialize(); err != nil {
@@ -42,8 +40,7 @@ func (a *App) Startup(ctx context.Context) {
 		}
 	}
 
-	// Start system service with context and config manager
-	services.System().Start(ctx, a.configManager)
+	return nil
 }
 
 // Greet returns a greeting for the given name

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
@@ -61,15 +60,15 @@ func SaveOAuthToken(token *oauth2.Token) error {
 		return fmt.Errorf("marshal oauth token: %w", err)
 	}
 
-	if err := keyring.Set(tokenService, oauthTokenKey, string(payload)); err != nil {
-		return fmt.Errorf("save oauth token to keyring: %w", err)
+	if err := secretSet(tokenService, oauthTokenKey, string(payload)); err != nil {
+		return fmt.Errorf("save oauth token to secure storage: %w", err)
 	}
 	return nil
 }
 
 // LoadOAuthToken loads the OAuth token from the OS keyring.
 func LoadOAuthToken() (*oauth2.Token, error) {
-	raw, err := keyring.Get(tokenService, oauthTokenKey)
+	raw, err := secretGet(tokenService, oauthTokenKey)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +77,7 @@ func LoadOAuthToken() (*oauth2.Token, error) {
 	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
 		legacyAccessToken := strings.TrimSpace(raw)
 		if legacyAccessToken == "" {
-			return nil, keyring.ErrNotFound
+			return nil, errSecretNotFound
 		}
 		// Backward compatibility with old plain-text token value.
 		return &oauth2.Token{
@@ -96,11 +95,11 @@ func LoadOAuthToken() (*oauth2.Token, error) {
 
 // ClearOAuthToken removes OAuth token from the OS keyring.
 func ClearOAuthToken() error {
-	err := keyring.Delete(tokenService, oauthTokenKey)
-	if err == nil || errors.Is(err, keyring.ErrNotFound) {
+	err := secretDelete(tokenService, oauthTokenKey)
+	if err == nil || errors.Is(err, errSecretNotFound) {
 		return nil
 	}
-	return fmt.Errorf("clear oauth token from keyring: %w", err)
+	return fmt.Errorf("clear oauth token from secure storage: %w", err)
 }
 
 // HasOAuthToken returns true when a token exists in the OS keyring.
@@ -109,7 +108,7 @@ func HasOAuthToken() (bool, error) {
 	if err == nil {
 		return token != nil && strings.TrimSpace(token.AccessToken) != "", nil
 	}
-	if errors.Is(err, keyring.ErrNotFound) {
+	if errors.Is(err, errSecretNotFound) {
 		return false, nil
 	}
 	return false, err

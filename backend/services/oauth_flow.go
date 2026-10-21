@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 )
 
@@ -183,7 +182,7 @@ func beginOAuthLogin() error {
 
 	authURL := oauthCfg.AuthCodeURL(state, authCodeOptions...)
 
-	if err := browser.OpenURL(authURL); err != nil {
+	if err := openExternalURL(authURL); err != nil {
 		return fmt.Errorf("open authorize url: %w", err)
 	}
 
