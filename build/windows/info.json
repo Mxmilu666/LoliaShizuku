@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "1.1.0"
+		"file_version": "1.1.1"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "1.1.0",
+			"ProductVersion": "1.1.1",
 			"CompanyName": "Mxmilu666",
 			"FileDescription": "LoliaShizuku desktop client for Lolia FRP",
 			"LegalCopyright": "© 2026, Mxmilu666",
