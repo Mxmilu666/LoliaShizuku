@@ -17,7 +17,7 @@
         PackageDisplayName="LoliaShizuku"
         PublisherName="CN=Mxmilu666"
         PublisherDisplayName="Mxmilu666"
-        Version="1.0.0.0"
+        Version="1.1.0.0"
         PackageDescription="LoliaShizuku desktop client for Lolia FRP">
         <Capabilities>
             <Capability Name="runFullTrust" />
