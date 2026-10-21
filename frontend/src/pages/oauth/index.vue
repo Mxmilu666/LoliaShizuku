@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { TokenService } from "../../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services";
 
 defineOptions({
   name: "OAuthPage",
@@ -39,12 +40,7 @@ async function handleLogin() {
 
   isLoading.value = true;
   try {
-    const tokenService = (window as any).go?.services?.TokenService;
-    if (!tokenService?.BeginOAuthLogin) {
-      throw new Error("后端 OAuth 服务未就绪，请重启应用。");
-    }
-
-    const ok = await tokenService.BeginOAuthLogin();
+    const ok = await TokenService.BeginOAuthLogin();
 
     if (!ok) {
       throw new Error("OAuth 授权失败，请重试。");
@@ -61,69 +57,68 @@ async function handleLogin() {
 </script>
 
 <template>
-  <v-container class="oauth-container">
-    <div class="oauth-content">
-      <!-- Logo Image -->
-      <div class="text-center mb-2">
-        <v-img
-          src="./imgs/yuzu_happy.png"
-          alt="Lolia Shizuku"
-          max-width="150"
-          class="mx-auto"
-        />
-      </div>
+  <div class="oauth-container">
+    <!-- MD3 卡片：28dp 圆角、surface container -->
+    <section class="oauth-card">
+      <v-img
+        src="./imgs/yuzu_happy.png"
+        alt="Lolia Shizuku"
+        width="132"
+        class="mx-auto"
+      />
 
-      <!-- Logo / Title -->
-      <div class="text-center mb-7">
-        <h1 class="text-h4 font-weight-bold mb-2">Lolia Shizuku</h1>
-        <p class="text-subtitle-1">
+      <div class="text-center">
+        <h1 class="text-headline-medium">Lolia Shizuku</h1>
+        <p class="text-body-medium md-on-surface-variant mt-2">
           「ロリア・雫」由 Wails 驱动的 Lolia FRP 第三方客户端
         </p>
       </div>
 
-      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
+      <v-alert v-if="errorMessage" type="error" variant="tonal" rounded="lg" density="compact">
         {{ errorMessage }}
       </v-alert>
 
-      <v-alert
-        v-if="successMessage"
-        type="success"
-        variant="tonal"
-        class="mb-4"
-      >
+      <v-alert v-if="successMessage" type="success" variant="tonal" rounded="lg" density="compact">
         {{ successMessage }}
       </v-alert>
 
-      <!-- Login Button -->
       <v-btn
         :loading="isLoading"
         color="primary"
+        variant="flat"
         size="large"
         block
+        append-icon="fas fa-arrow-right-long"
         @click="handleLogin"
       >
-        <v-icon v-if="!isLoading" start>fas fa-arrow-right-long</v-icon>
         使用 Lolia FRP 账号登录
       </v-btn>
-    </div>
-  </v-container>
+
+      <p class="text-body-small md-on-surface-variant text-center">
+        将在浏览器中打开授权页面，完成后自动返回
+      </p>
+    </section>
+  </div>
 </template>
 
 <style scoped>
 .oauth-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 24px;
 }
 
-.oauth-content {
+.oauth-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   width: 100%;
   max-width: 400px;
+  padding: 32px 24px 24px;
+  border-radius: 28px;
+  background: var(--md-surface-container);
 }
 </style>

@@ -24,8 +24,6 @@ import (
 	"github.com/Mxmilu666/LoliaShizuku/backend/api"
 	"github.com/Mxmilu666/LoliaShizuku/backend/httpclient"
 	"github.com/Mxmilu666/LoliaShizuku/backend/models"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -65,6 +63,12 @@ type frpcUserSettings struct {
 
 var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
 	{
+		ID:          "lolia",
+		Name:        "gh.lolia.link",
+		Description: "Lolia 官方 GitHub 镜像",
+		BaseURL:     "https://gh.lolia.link",
+	},
+	{
 		ID:          "milu",
 		Name:        "gh.milu.moe",
 		Description: "Milu GitHub 镜像",
@@ -75,18 +79,6 @@ var defaultBuiltinFrpcMirrors = []models.FrpcMirrorPreset{
 		Name:        "cdn.akaere.online",
 		Description: "Akaere GitHub 路径镜像",
 		BaseURL:     "https://cdn.akaere.online/github.com",
-	},
-	{
-		ID:          "xiaomocs",
-		Name:        "hub.xiaomocs.com",
-		Description: "XiaoMo GitHub 路径镜像",
-		BaseURL:     "https://hub.xiaomocs.com/github",
-	},
-	{
-		ID:          "locyan",
-		Name:        "mirrors.locyan.cn",
-		Description: "乐青云镜像",
-		URLTemplate: "https://mirrors.locyan.cn/github-release/{owner}/{repo}/Release%20{tag}/{asset}",
 	},
 }
 
@@ -426,11 +418,6 @@ func (s *FrpcService) paths() (models.FrpcPaths, error) {
 }
 
 func (s *FrpcService) emitInstallProgress(phase string, downloaded, total int64) {
-	ctx := System().ctx
-	if ctx == nil {
-		return
-	}
-
 	percent := 0.0
 	if total > 0 {
 		percent = float64(downloaded) / float64(total) * 100
@@ -439,7 +426,7 @@ func (s *FrpcService) emitInstallProgress(phase string, downloaded, total int64)
 		}
 	}
 
-	wruntime.EventsEmit(ctx, frpcInstallProgressEvent, map[string]interface{}{
+	System().Emit(frpcInstallProgressEvent, map[string]interface{}{
 		"phase":      phase,
 		"downloaded": downloaded,
 		"total":      total,

@@ -3,8 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-
-	"github.com/zalando/go-keyring"
 )
 
 // TokenService exposes token helpers to the frontend via Wails binding.
@@ -17,13 +15,20 @@ func NewTokenService() *TokenService {
 
 // HasOAuthToken checks whether an OAuth token exists in the system keyring.
 func (s *TokenService) HasOAuthToken() (bool, error) {
-	ctx := context.Background()
+	// 路由守卫每次导航都会调用，限制刷新耗时，避免网络异常时界面卡住
+	ctx, cancel := context.WithTimeout(context.Background(), defaultHTTPTimeout)
+	defer cancel()
 	token, err := loadOrRefreshOAuthToken(ctx)
 	if err == nil {
 		return token != nil, nil
 	}
-	if errors.Is(err, keyring.ErrNotFound) {
+	if errors.Is(err, errOAuthLoginRequired) {
 		return false, nil
+	}
+	// 刷新遇到网络等临时错误时 token 仍保留：视为已登录，避免离线启动就被踢到登录页，
+	// 页面请求会显示具体错误，恢复网络后自动刷新
+	if stored, loadErr := LoadOAuthToken(); loadErr == nil && stored != nil && stored.RefreshToken != "" {
+		return true, nil
 	}
 	return false, err
 }

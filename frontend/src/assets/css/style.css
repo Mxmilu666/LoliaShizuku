@@ -11,3 +11,202 @@ body {
   width: 100%;
   height: 100%;
 }
+
+/* Vuetify 4 移除了全局 reset，这里恢复常用元素的间距重置 */
+@layer vuetify-core.reset {
+  ul, ol, figure, details, summary {
+    padding: 0;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4, h5, h6, p {
+    margin: 0;
+  }
+}
+
+/*
+ * MD3 色彩角色。颜色由 plugins/theme.ts 按 MD3 动态配色（HCT + TonalSpot）从强调色生成，
+ * 这里只做别名，便于在组件样式中按 MD3 角色名引用。
+ */
+.v-theme--lightTheme,
+.v-theme--darkTheme {
+  --md-surface: rgb(var(--v-theme-surface));
+  --md-surface-container-lowest: rgb(var(--v-theme-surface-container-lowest));
+  --md-surface-container-low: rgb(var(--v-theme-surface-container-low));
+  --md-surface-container: rgb(var(--v-theme-surface-container));
+  --md-surface-container-high: rgb(var(--v-theme-surface-container-high));
+  --md-surface-container-highest: rgb(var(--v-theme-surface-container-highest));
+  --md-primary-container: rgb(var(--v-theme-primary-container));
+  --md-on-primary-container: rgb(var(--v-theme-on-primary-container));
+  --md-secondary-container: rgb(var(--v-theme-secondary-container));
+  --md-on-secondary-container: rgb(var(--v-theme-on-secondary-container));
+  --md-on-surface-variant: rgb(var(--v-theme-md-on-surface-variant));
+  --md-outline: rgb(var(--v-theme-outline));
+  --md-outline-variant: rgb(var(--v-theme-outline-variant));
+}
+
+/* Vuetify 4 网格改为 gap 布局；现有页面依赖旧的负 margin + 列 padding 布局，按官方 Grid Legacy Mode 恢复 */
+@layer vuetify-overrides {
+  .v-row {
+    gap: unset;
+    margin: calc(var(--v-col-gap-y) * -.5) calc(var(--v-col-gap-x) * -.5);
+  }
+  .v-row + .v-row {
+    margin-top: calc(var(--v-col-gap-y) * .5);
+  }
+  .v-col {
+    padding: calc(var(--v-col-gap-y) * .5) calc(var(--v-col-gap-x) * .5);
+    flex-basis: var(--v-col-is-size, calc(100% * var(--v-col-size) / var(--v-col-size-columns))) var(--v-col-is-auto, auto) var(--v-col-is-grow, 0);
+  }
+  .v-col:where([class*='v-col--offset-']) {
+    margin-inline-start: calc(100% * var(--v-col-offset) / var(--v-col-size-columns))
+  }
+
+  /* 恢复 v3 的容器最大宽度（与下方 main.ts 中恢复的断点一致） */
+  @media (min-width: 960px) {
+    .v-container { max-width: 900px; }
+  }
+  @media (min-width: 1280px) {
+    .v-container { max-width: 1200px; }
+  }
+  @media (min-width: 1920px) {
+    .v-container { max-width: 1800px; }
+  }
+}
+
+/* ---------- MD3 通用组件样式（各页面共用） ---------- */
+
+.md-on-surface-variant {
+  color: var(--md-on-surface-variant);
+}
+
+.md-mono {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+/* 页面标题区 */
+.md-page {
+  padding-bottom: 88px; /* 为右下角全局 FAB 留出空间 */
+}
+
+.md-page-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* MD3 卡片：filled / outlined，12dp 圆角 */
+.md-card-filled,
+.md-card-outlined {
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.md-card-filled {
+  background: var(--md-surface-container-highest);
+}
+
+.md-card-outlined {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+}
+
+/* 强调卡片：primary container */
+.md-card-primary {
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+
+/* 带色块的图标容器 */
+.md-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+
+/* 统计卡片：MD3 filled card */
+.md-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--md-surface-container-highest);
+}
+
+.md-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--md-on-surface-variant);
+}
+
+/* 分节标题 */
+.md-section-title {
+  margin-bottom: 12px;
+}
+
+/* 键值列表行 */
+.md-kv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.md-kv-row + .md-kv-row {
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+/* MD3 对话框表面 */
+.md-dialog {
+  border-radius: 28px !important;
+  background: var(--md-surface-container-high) !important;
+}
+
+/* MD3 全屏对话框（移动端）：无圆角、surface 背景 */
+.md-dialog.md-dialog--fullscreen {
+  border-radius: 0 !important;
+  background: var(--md-surface) !important;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Font Awesome 字形比 Material Symbols 更“重”，图标按钮内统一缩小 */
+.v-btn--icon.v-btn--size-default .v-icon {
+  font-size: 18px;
+}
+
+.v-btn--icon.v-btn--size-small .v-icon {
+  font-size: 15px;
+}
+
+/* MD3 filled tonal button：secondary container */
+.md-btn-tonal.v-btn {
+  background: var(--md-secondary-container) !important;
+  color: var(--md-on-secondary-container) !important;
+}
+
+/* ---------- 移动端（根元素带 is-mobile） ---------- */
+
+/* 页面标题由顶栏显示，页内大标题隐藏 */
+.is-mobile .md-page-header {
+  display: none;
+}
+
+/* 为右下角 FAB 留出空间 */
+.is-mobile .md-page {
+  padding-bottom: 96px;
+}

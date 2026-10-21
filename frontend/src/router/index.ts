@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { TokenService } from '../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services'
 
 const routes = [
   {
     path: '/',
     name: 'home',
+    meta: { title: '首页' },
     component: () => import('@/pages/home/index.vue')
   },
   {
@@ -14,16 +16,19 @@ const routes = [
   {
     path: '/tunnels',
     name: 'tunnels',
+    meta: { title: '隧道' },
     component: () => import('@/pages/tunnels/index.vue')
   },
   {
     path: '/runner',
     name: 'runner',
+    meta: { title: '运行' },
     component: () => import('@/pages/runner/index.vue')
   },
   {
     path: '/settings',
     name: 'settings',
+    meta: { title: '设置' },
     component: () => import('@/pages/settings/index.vue')
   }
 ]
@@ -34,13 +39,8 @@ const router = createRouter({
 })
 
 const hasOAuthToken = async () => {
-  const tokenService = (window as any).go?.services?.TokenService
-  if (!tokenService?.HasOAuthToken) {
-    return false
-  }
-
   try {
-    return await tokenService.HasOAuthToken()
+    return await TokenService.HasOAuthToken()
   } catch {
     return false
   }

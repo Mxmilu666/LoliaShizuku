@@ -1,3 +1,20 @@
-build/bin
+bin
+.task
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 node_modules
 frontend/dist
+build/windows/icon.ico
+build/darwin/icons.icns
+build/android/app/src/main/res/mipmap-*/ic_launcher*.png
+build/android/overlay.json
+build/android/gen/
+# Android 构建产物
+build/android/.gradle/
+build/android/build/
+build/android/app/build/
+build/android/app/src/main/jniLibs/
+build/android/local.properties
+# Android 签名密钥，切勿提交
+*.keystore
+*.jks

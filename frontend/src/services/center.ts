@@ -1,3 +1,30 @@
+import { CenterService } from "../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services";
+import type {
+  Announcement,
+  CreateTunnelRequest,
+  DomainItem,
+  NodeItem,
+  TunnelConfigUpdate,
+  TunnelConfigView,
+  TunnelItem,
+  TunnelRealtimeTraffic,
+  TunnelsPageData,
+  UpdateTunnelRequest,
+} from "../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/models";
+
+export type {
+  Announcement,
+  CreateTunnelRequest,
+  DomainItem,
+  NodeItem,
+  TunnelConfigUpdate,
+  TunnelConfigView,
+  TunnelItem,
+  TunnelRealtimeTraffic,
+  TunnelsPageData,
+  UpdateTunnelRequest,
+};
+
 type CenterServiceBinding = {
   GetDashboard: () => Promise<any>;
   GetRunnerRuntimeStatus: () => Promise<any>;
@@ -10,11 +37,7 @@ type CenterServiceBinding = {
 };
 
 function getCenterServiceBinding(): CenterServiceBinding {
-  const svc = (window as any).go?.services?.CenterService;
-  if (!svc) {
-    throw new Error("CenterService 未绑定，请重启应用。");
-  }
-  return svc as CenterServiceBinding;
+  return CenterService as unknown as CenterServiceBinding;
 }
 
 function parseError(error: unknown): Error {
@@ -229,6 +252,96 @@ export async function getTrafficDaily(days = 7): Promise<DailyTrafficResponse> {
   try {
     const svc = getCenterServiceBinding();
     return (await svc.GetTrafficDaily(days)) as DailyTrafficResponse;
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function getTunnelsPage(days = 2): Promise<TunnelsPageData> {
+  try {
+    const data = await CenterService.GetTunnelsPage(days);
+    if (!data) {
+      throw new Error("获取隧道列表失败");
+    }
+    return { ...data, tunnels: data.tunnels ?? [], nodes: data.nodes ?? [] };
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function createTunnel(req: CreateTunnelRequest): Promise<TunnelItem | null> {
+  try {
+    return await CenterService.CreateTunnel(req);
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function updateTunnel(
+  tunnelName: string,
+  req: UpdateTunnelRequest,
+): Promise<TunnelItem | null> {
+  try {
+    return await CenterService.UpdateTunnel(tunnelName, req);
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function deleteTunnel(tunnelName: string): Promise<void> {
+  try {
+    await CenterService.DeleteTunnel(tunnelName);
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function getTunnelRealtimeTraffic(
+  tunnelName: string,
+): Promise<TunnelRealtimeTraffic | null> {
+  try {
+    return await CenterService.GetTunnelRealtimeTraffic(tunnelName);
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+// 中心端返回的配置为 base64 编码，按 UTF-8 解码（配置中可能含中文备注）
+function decodeBase64UTF8(value: string): string {
+  const binary = atob(value.trim());
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+export async function getFrpcConfig(tunnelName: string): Promise<string> {
+  let encoded = "";
+  try {
+    const data = await CenterService.GetFrpcConfig(tunnelName);
+    encoded = data?.config ?? "";
+  } catch (error) {
+    throw parseError(error);
+  }
+  if (!encoded) return "";
+  try {
+    return decodeBase64UTF8(encoded);
+  } catch {
+    throw new Error("配置文件解码失败");
+  }
+}
+
+export async function getUserDomains(): Promise<DomainItem[]> {
+  try {
+    const data = await CenterService.GetUserDomains();
+    return data?.domains ?? [];
+  } catch (error) {
+    throw parseError(error);
+  }
+}
+
+export async function getHomeAnnouncements(): Promise<{ top: Announcement[]; board: Announcement[] }> {
+  try {
+    const data = await CenterService.GetHomeAnnouncements();
+    return { top: data?.top ?? [], board: data?.board ?? [] };
   } catch (error) {
     throw parseError(error);
   }

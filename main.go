@@ -1,16 +1,14 @@
 package main
 
 import (
-	"context"
 	"embed"
+	"log"
 
 	"github.com/Mxmilu666/LoliaShizuku/backend"
 	"github.com/Mxmilu666/LoliaShizuku/backend/config"
 	"github.com/Mxmilu666/LoliaShizuku/backend/services"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -22,6 +20,8 @@ const (
 )
 
 func main() {
+	prepareEnvironment()
+
 	// Initialize configuration early to restore window size
 	configManager := config.NewManager()
 	if err := configManager.Initialize(); err != nil {
@@ -31,9 +31,9 @@ func main() {
 	prefSvc := services.NewPreferencesService(configManager)
 
 	width, height, maximised := prefSvc.GetWindowSize()
-	windowStartState := options.Normal
+	windowStartState := application.WindowStateNormal
 	if maximised {
-		windowStartState = options.Maximised
+		windowStartState = application.WindowStateMaximised
 	}
 
 	// Create an instance of the app structure
@@ -41,37 +41,45 @@ func main() {
 	tokenService := services.NewTokenService()
 	centerService := services.NewCenterService()
 	frpcService := services.NewFrpcService()
+	systemColorService := services.NewSystemColorService()
 
 	// Create application with options
-	err := wails.Run(&options.App{
-		Title:            "LoliaShizuku",
-		Width:            width,
-		Height:           height,
-		MinWidth:         minWindowWidth,
-		MinHeight:        minWindowHeight,
-		WindowStartState: windowStartState,
-		Frameless:        true,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	wailsApp := application.New(application.Options{
+		Name:        "LoliaShizuku",
+		Description: "LoliaShizuku desktop client for Lolia FRP",
+		Services: []application.Service{
+			application.NewService(app),
+			application.NewService(prefSvc),
+			application.NewService(tokenService),
+			application.NewService(centerService),
+			application.NewService(frpcService),
+			application.NewService(systemColorService),
 		},
-		OnStartup: app.Startup,
-		OnBeforeClose: func(ctx context.Context) bool {
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		OnShutdown: func() {
 			_, _ = centerService.StopRunner()
-			return false
-		},
-		OnShutdown: func(ctx context.Context) {
-			_, _ = centerService.StopRunner()
-		},
-		Bind: []interface{}{
-			app,
-			prefSvc,
-			tokenService,
-			centerService,
-			frpcService,
 		},
 	})
 
-	if err != nil {
-		println("Error:", err.Error())
+	window := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:      "LoliaShizuku",
+		Width:      width,
+		Height:     height,
+		MinWidth:   minWindowWidth,
+		MinHeight:  minWindowHeight,
+		StartState: windowStartState,
+		Frameless:  true,
+		URL:        "/",
+	})
+
+	startWindowStateSync(window, configManager)
+
+	if err := wailsApp.Run(); err != nil {
+		log.Fatal(err)
 	}
 }
