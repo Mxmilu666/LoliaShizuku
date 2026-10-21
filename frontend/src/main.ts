@@ -9,7 +9,15 @@ import {
   darkTheme,
   applyAccentColors,
   readSavedAccentId,
+  DYNAMIC_ACCENT_ID,
 } from "./plugins/theme";
+import { refreshDynamicColors } from "./services/dynamicColor";
+import { isMobile } from "./utils/platform";
+
+// 移动端在根元素上标记，供全局样式切换为移动布局
+if (isMobile) {
+  document.documentElement.classList.add("is-mobile");
+}
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 
@@ -59,6 +67,21 @@ const vuetify = createVuetify({
   components,
   directives,
   blueprint: md3,
+  // 保持 v3 的断点，避免 Vuetify 4 缩小断点后现有页面的栅格布局变化
+  display: {
+    thresholds: {
+      md: 960,
+      lg: 1280,
+      xl: 1920,
+      xxl: 2560,
+    },
+  },
+  defaults: {
+    // MD3 chip 形状为 8dp 圆角（blueprint 默认为 2px）
+    VChip: {
+      rounded: "lg",
+    },
+  },
   theme: {
     defaultTheme: resolveThemeName(readSavedThemeMode()),
     themes: {
@@ -91,3 +114,19 @@ syncSystemTheme();
 const pinia = createPinia();
 
 createApp(App).use(pinia).use(router).use(vuetify).mount("#app");
+
+// 莫奈取色：启动时先使用缓存的种子色，再在后台按当前壁纸重新取色（壁纸可能已更换）
+if (readSavedAccentId() === DYNAMIC_ACCENT_ID) {
+  void refreshDynamicColors(vuetify.theme.themes.value).catch(() => {
+    // 取色失败时保留缓存配色
+  });
+}
+
+// Android：从后台切回时重新取色（期间可能更换了壁纸 / 系统配色）
+if (isMobile) {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && readSavedAccentId() === DYNAMIC_ACCENT_ID) {
+      void refreshDynamicColors(vuetify.theme.themes.value).catch(() => {});
+    }
+  });
+}
