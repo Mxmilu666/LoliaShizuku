@@ -110,8 +110,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          # 固定版本：v2.47+ 需要 Go 1.26.4，高于 go.mod 的 Go 版本
-          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.46.3
+          # 固定版本，避免 @latest 要求比 go.mod 更新的 Go
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build app

@@ -15,12 +15,12 @@
 
 ## 技术栈
 
-- 后端：Go 1.25、Wails v3、OAuth2、系统 Keyring
+- 后端：Go 1.27、Wails v3、OAuth2、系统 Keyring
 - 前端：Vue 3、TypeScript、Vuetify 4（Material Design 3）、Pinia、Vite
 
 ## 环境要求
 
-- Go `>= 1.25`
+- Go `>= 1.27`
 - Bun（用于前端依赖与构建）
 - Wails v3 CLI（`wails3`）
 - Linux 额外需要 `libgtk-3-dev`、`libwebkit2gtk-4.1-dev`（构建时需带 `EXTRA_TAGS=gtk3`）

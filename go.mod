@@ -1,6 +1,6 @@
 module github.com/Mxmilu666/LoliaShizuku
 
-go 1.25.0
+go 1.27.1
 
 require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c

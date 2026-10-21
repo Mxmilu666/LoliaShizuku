@@ -29,7 +29,7 @@ There is **no test suite** and no separate lint step in this repo. Use `go vet .
 
 ### Prerequisites
 
-- Go `>= 1.25`, Bun, and the Wails v3 CLI (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.28`; keep it in sync with `go.mod`).
+- Go `>= 1.27`, Bun, and the Wails v3 CLI (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.28`; keep it in sync with `go.mod`).
 - `CGO_ENABLED=1` is required for builds (WebView bindings) — see `.github/workflows/release.yml`.
 - Build orchestration lives in `Taskfile.yml` + `build/Taskfile.yml` + `build/<os>/Taskfile.yml`; app metadata in `build/config.yml`. `EXTRA_LDFLAGS` / `EXTRA_TAGS` vars are appended to production `go build`.
 - Linux uses GTK3 / WebKitGTK 4.1 via the `gtk3` build tag (v3's default is GTK4 / WebKitGTK 6.0).
