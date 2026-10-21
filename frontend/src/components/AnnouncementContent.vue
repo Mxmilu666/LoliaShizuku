@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed } from "vue";
-import { Browser } from "@wailsio/runtime";
+import { openExternalURL } from "@/utils/browser";
 import { renderAnnouncementContent, safeExternalURL } from "@/utils/announcement";
 
 const props = defineProps<{ content: string }>();
@@ -14,7 +14,7 @@ const handleClick = (event: MouseEvent) => {
   event.preventDefault();
   const url = safeExternalURL(anchor.getAttribute("href"));
   if (url) {
-    void Browser.OpenURL(url);
+    openExternalURL(url);
   }
 };
 </script>

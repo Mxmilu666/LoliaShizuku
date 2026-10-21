@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Browser } from "@wailsio/runtime";
+import { openExternalURL } from "@/utils/browser";
 import {
   deleteTunnel,
   getRunnerRuntimeStatus,
@@ -198,7 +198,7 @@ const handleCopy = async (text: string, label = "内容") => {
 };
 
 const openWeb = (tunnel: TunnelItem) => {
-  Browser.OpenURL(
+  openExternalURL(
     `https://dash.lolia.link/dash/tunnel/${encodeURIComponent(tunnel.name.trim())}`,
   );
 };

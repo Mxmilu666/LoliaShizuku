@@ -16,7 +16,7 @@ import {
   type Announcement,
   type DailyTrafficResponse,
 } from "@/services/center";
-import { Browser } from "@wailsio/runtime";
+import { openExternalURL } from "@/utils/browser";
 import AnnouncementContent from "@/components/AnnouncementContent.vue";
 import { getAnnouncementLevelMeta, safeExternalURL } from "@/utils/announcement";
 import { useGlobalLoadingStore } from "@/stores/globalLoading";
@@ -241,7 +241,7 @@ const loadAnnouncements = async () => {
 const openAnnouncementAction = (value: string) => {
   const url = safeExternalURL(value);
   if (url) {
-    void Browser.OpenURL(url);
+    openExternalURL(url);
   }
 };
 

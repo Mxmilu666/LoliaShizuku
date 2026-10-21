@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTheme } from "vuetify";
 import { storeToRefs } from "pinia";
-import { Browser } from "@wailsio/runtime";
+import { openExternalURL } from "@/utils/browser";
 import { App } from "../../../bindings/github.com/Mxmilu666/LoliaShizuku/backend";
 import { CenterService, TokenService } from "../../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services";
 import type { Info as VersionInfo } from "../../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/version";
@@ -275,7 +275,7 @@ const latestDetails = computed(() => [
 const formatTime = (value?: string) => formatDateTime(value);
 
 const openURL = (url: string) => {
-  Browser.OpenURL(url);
+  openExternalURL(url);
 };
 
 const copyPath = async (value?: string) => {

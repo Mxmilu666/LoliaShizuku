@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Browser } from "@wailsio/runtime";
+import { openExternalURL } from "@/utils/browser";
 import { TokenService } from "../../../bindings/github.com/Mxmilu666/LoliaShizuku/backend/services";
 import QRCode from "qrcode";
 import { copyText } from "@/utils/tunnel";
@@ -128,7 +128,7 @@ function cancelDeviceLogin() {
 
 function openVerificationPage() {
   if (device.value) {
-    void Browser.OpenURL(device.value.verificationURIComplete);
+    openExternalURL(device.value.verificationURIComplete);
   }
 }
 
