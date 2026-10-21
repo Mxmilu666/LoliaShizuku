@@ -18,7 +18,7 @@ env:
     sh: 'echo "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$([ -d "$HOME/Library/Android/sdk" ] && echo "$HOME/Library/Android/sdk" || echo "$HOME/Android/Sdk")}}"'
 
 vars:
-  APP_ID: '{{.APP_ID | default "com.wails.loliashizuku"}}'
+  APP_ID: '{{.APP_ID | default "com.mxmilu666.loliashizuku"}}'
   MIN_SDK: '21'
   # 见 app/build.gradle：执行下载的 frpc 二进制需要 targetSdk 28
   TARGET_SDK: '28'

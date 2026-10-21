@@ -3,6 +3,8 @@ plugins {
 }
 
 android {
+    // Java 包名需保持 com.wails.app：Wails 的 JNI 导出符号（Java_com_wails_app_*）写死了该包名。
+    // 应用的实际包名由下方 applicationId 决定。
     namespace 'com.wails.app'
     compileSdk 35
 
@@ -18,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.wails.loliashizuku"
+        applicationId "com.mxmilu666.loliashizuku"
         minSdk 21
         // 与 Termux 相同：targetSdk 28 才允许执行应用私有目录中下载的 frpc 二进制（API 29+ 禁止）。
         // 代价是无法上架 Google Play，仅通过 APK 分发。
