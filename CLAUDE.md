@@ -64,7 +64,7 @@ Backend → frontend push uses Wails events: `System().Emit("window_changed", ..
 
 ### OAuth flow
 
-Desktop login is **Authorization Code + PKCE** (fixed). Files: `oauth_flow.go`, `oauth_token.go`, `token_service.go`, `token_store.go`. Tokens are stored in the OS **keyring** (`zalando/go-keyring`) under service `LoliaShizuku`, key `oauth_token`. Default callback listens on `http://localhost:1145`. `loadOrRefreshOAuthToken` handles refresh; on failure the token is cleared and the router guard (`frontend/src/router/index.ts` `beforeEach`) redirects to `/oauth`.
+Desktop login is **Authorization Code + PKCE** (fixed). Files: `oauth_flow.go`, `oauth_token.go`, `token_service.go`, `token_store.go`. Tokens are stored in the OS **keyring** (`zalando/go-keyring`) under service `LoliaShizuku`, key `oauth_token`. Default callback listens on `http://localhost:1145`. `loadValidOAuthToken` (`oauth_token.go`) handles refresh under a mutex — the center revokes the previous access token on every refresh (access 24h, refresh token fixed for 30 days from login), so concurrent refreshes would revoke each other. `httpclient` refreshes once and retries on a 401 (`RefreshAccessToken`), and clears the token only if the retry is rejected too. A rejected refresh token (`invalid_grant`) clears the token (`errOAuthLoginRequired`) and the router guard (`frontend/src/router/index.ts` `beforeEach`) redirects to `/oauth`; network errors during refresh keep the token, and `HasOAuthToken` still reports logged in.
 
 ### Configuration (two distinct stores — don't confuse them)
 

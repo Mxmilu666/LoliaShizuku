@@ -47,6 +47,11 @@ func NewCenterService() *CenterService {
 		GetAccessToken: func(ctx context.Context) (string, error) {
 			return service.getValidAccessToken(ctx)
 		},
+		RefreshAccessToken: func(ctx context.Context, rejected string) (string, error) {
+			refreshCtx, cancel := context.WithTimeout(ctx, defaultHTTPTimeout)
+			defer cancel()
+			return refreshRejectedAccessToken(refreshCtx, rejected)
+		},
 		OnUnauthorized: func(ctx context.Context) error {
 			return ClearOAuthToken()
 		},

@@ -33,15 +33,19 @@ type Options struct {
 	HTTPClient     *http.Client
 	UserAgent      string
 	GetAccessToken func(ctx context.Context) (string, error)
-	OnUnauthorized func(ctx context.Context) error
+	// RefreshAccessToken 在请求返回 401 时调用，rejected 为被拒绝的 access token；
+	// 返回新的 access token 后请求会重试一次。
+	RefreshAccessToken func(ctx context.Context, rejected string) (string, error)
+	OnUnauthorized     func(ctx context.Context) error
 }
 
 type Client struct {
-	baseURL        string
-	httpClient     *http.Client
-	userAgent      string
-	getAccessToken func(ctx context.Context) (string, error)
-	onUnauthorized func(ctx context.Context) error
+	baseURL            string
+	httpClient         *http.Client
+	userAgent          string
+	getAccessToken     func(ctx context.Context) (string, error)
+	refreshAccessToken func(ctx context.Context, rejected string) (string, error)
+	onUnauthorized     func(ctx context.Context) error
 }
 
 type envelopeProbe struct {
@@ -70,11 +74,12 @@ func New(options Options) *Client {
 	}
 
 	return &Client{
-		baseURL:        strings.TrimRight(strings.TrimSpace(options.BaseURL), "/"),
-		httpClient:     httpClient,
-		userAgent:      userAgent,
-		getAccessToken: options.GetAccessToken,
-		onUnauthorized: options.OnUnauthorized,
+		baseURL:            strings.TrimRight(strings.TrimSpace(options.BaseURL), "/"),
+		httpClient:         httpClient,
+		userAgent:          userAgent,
+		getAccessToken:     options.GetAccessToken,
+		refreshAccessToken: options.RefreshAccessToken,
+		onUnauthorized:     options.OnUnauthorized,
 	}
 }
 
@@ -98,44 +103,39 @@ func (c *Client) DoJSON(
 	}
 	requestURL.RawQuery = queryValues.Encode()
 
-	var reqBody io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		payload, marshalErr := json.Marshal(body)
+		encoded, marshalErr := json.Marshal(body)
 		if marshalErr != nil {
 			return fmt.Errorf("marshal request body for %s: %w", path, marshalErr)
 		}
-		reqBody = bytes.NewReader(payload)
+		bodyBytes = encoded
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, requestURL.String(), reqBody)
-	if err != nil {
-		return fmt.Errorf("build request for %s: %w", path, err)
-	}
-	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
+	accessToken := ""
 	if c.getAccessToken != nil {
-		accessToken, tokenErr := c.getAccessToken(ctx)
+		token, tokenErr := c.getAccessToken(ctx)
 		if tokenErr != nil {
 			return tokenErr
 		}
-		req.Header.Set("Authorization", "Bearer "+accessToken)
+		accessToken = token
 	}
 
-	resp, err := c.httpClient.Do(req)
+	statusCode, payload, err := c.send(ctx, method, requestURL.String(), path, bodyBytes, body != nil, accessToken)
 	if err != nil {
-		return fmt.Errorf("request %s %s: %w", method, path, err)
+		return err
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
 
-	payload, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return fmt.Errorf("read response body for %s: %w", path, readErr)
+	// access token 被服务端拒绝（可能已被撤销或本地时钟偏差）：刷新后重试一次
+	if accessToken != "" && c.refreshAccessToken != nil && isUnauthorizedResponse(statusCode, payload) {
+		refreshed, refreshErr := c.refreshAccessToken(ctx, accessToken)
+		if refreshErr != nil {
+			return errors.Join(ErrUnauthorized, refreshErr)
+		}
+		statusCode, payload, err = c.send(ctx, method, requestURL.String(), path, bodyBytes, body != nil, refreshed)
+		if err != nil {
+			return err
+		}
 	}
 
 	var probe envelopeProbe
@@ -164,23 +164,23 @@ func (c *Client) DoJSON(
 	}
 
 	// 仅 401 视为登录失效；403 在中心端用于业务限制（如隧道数量上限、未绑定 QQ），不应清除 Token
-	if resp.StatusCode == http.StatusUnauthorized || businessCode == http.StatusUnauthorized {
+	if statusCode == http.StatusUnauthorized || businessCode == http.StatusUnauthorized {
 		if c.onUnauthorized != nil {
 			_ = c.onUnauthorized(ctx)
 		}
 		apiErr := &APIError{
 			Path:       path,
-			StatusCode: resp.StatusCode,
+			StatusCode: statusCode,
 			Code:       businessCode,
 			Message:    message,
 		}
 		return errors.Join(ErrUnauthorized, apiErr)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if statusCode < 200 || statusCode >= 300 {
 		return &APIError{
 			Path:       path,
-			StatusCode: resp.StatusCode,
+			StatusCode: statusCode,
 			Code:       businessCode,
 			Message:    message,
 		}
@@ -190,7 +190,7 @@ func (c *Client) DoJSON(
 	if businessCode != 0 && (businessCode < 200 || businessCode >= 300) {
 		return &APIError{
 			Path:       path,
-			StatusCode: resp.StatusCode,
+			StatusCode: statusCode,
 			Code:       businessCode,
 			Message:    message,
 		}
@@ -218,6 +218,58 @@ func (c *Client) DoJSON(
 		return fmt.Errorf("decode response for %s: %w", path, err)
 	}
 	return nil
+}
+
+func (c *Client) send(
+	ctx context.Context,
+	method, requestURL, path string,
+	body []byte,
+	hasBody bool,
+	accessToken string,
+) (int, []byte, error) {
+	var reqBody io.Reader
+	if hasBody {
+		reqBody = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build request for %s: %w", path, err)
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Accept", "application/json")
+	if hasBody {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("request %s %s: %w", method, path, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, fmt.Errorf("read response body for %s: %w", path, err)
+	}
+	return resp.StatusCode, payload, nil
+}
+
+// isUnauthorizedResponse 判断响应是否为 401（HTTP 状态码或信封中的业务码）。
+func isUnauthorizedResponse(statusCode int, payload []byte) bool {
+	if statusCode == http.StatusUnauthorized {
+		return true
+	}
+	var probe envelopeProbe
+	if err := json.Unmarshal(payload, &probe); err != nil {
+		return false
+	}
+	return probe.Code == http.StatusUnauthorized || (probe.Code == 0 && probe.Status == http.StatusUnauthorized)
 }
 
 func hasEnvelopeShape(payload []byte) bool {
