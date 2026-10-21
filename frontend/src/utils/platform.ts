@@ -55,6 +55,11 @@ export function getAndroidDynamicSeed(): { seed: string; source: "system" | "wal
 }
 
 /**
+ * 当前显示的移动端 FAB 数量。大于 0 时 Snackbar 需上移到 FAB 之上（MD3）。
+ */
+export const mobileFabCount = ref(0);
+
+/**
  * 当前打开的全屏对话框数量（移动端）。大于 0 时系统栏改用对话框的 surface 颜色。
  */
 export const fullscreenDialogCount = ref(0);

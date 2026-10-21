@@ -6,7 +6,7 @@ import { useTheme } from "vuetify";
 import FloatingActionButton from "./components/FloatingActionButton.vue";
 import MobileNavBar from "./components/MobileNavBar.vue";
 import { useGlobalLoadingStore } from "@/stores/globalLoading";
-import { fullscreenDialogCount, isMobile, setSystemBars } from "@/utils/platform";
+import { fullscreenDialogCount, isMobile, mobileFabCount, setSystemBars } from "@/utils/platform";
 
 const globalLoadingStore = useGlobalLoadingStore();
 const route = useRoute();
@@ -35,6 +35,14 @@ if (isMobile) {
       navigationBar: !inDialog && showMobileNav.value ? container : surface,
       dark: theme.current.value.dark,
     });
+  });
+
+  // Snackbar 需避开底部导航栏与 FAB（见 style.css）；全屏对话框会盖住二者，此时无需避让
+  watchEffect(() => {
+    const root = document.documentElement.classList;
+    const inDialog = fullscreenDialogCount.value > 0;
+    root.toggle("has-mobile-nav", showMobileNav.value && !inDialog);
+    root.toggle("has-mobile-fab", mobileFabCount.value > 0 && !inDialog);
   });
 }
 </script>

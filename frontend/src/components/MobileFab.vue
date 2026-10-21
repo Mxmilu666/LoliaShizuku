@@ -1,4 +1,7 @@
 <script lang="ts" setup>
+import { onBeforeUnmount, onMounted } from "vue";
+import { mobileFabCount } from "@/utils/platform";
+
 defineProps<{
   icon: string;
   label: string;
@@ -8,6 +11,13 @@ defineProps<{
 }>();
 
 defineEmits<{ click: [] }>();
+
+onMounted(() => {
+  mobileFabCount.value += 1;
+});
+onBeforeUnmount(() => {
+  mobileFabCount.value -= 1;
+});
 </script>
 
 <template>

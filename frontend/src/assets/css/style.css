@@ -201,6 +201,21 @@ body {
 
 /* ---------- 移动端（根元素带 is-mobile） ---------- */
 
+/* MD3：Snackbar 显示在底部导航栏与 FAB 之上，不遮挡它们（Vuetify 不感知自定义的底部导航栏） */
+.has-mobile-nav .v-snackbar:not(.v-snackbar--top):not(.v-snackbar--center) {
+  margin-bottom: calc(80px + 8px + env(safe-area-inset-bottom, 0px));
+}
+
+.has-mobile-fab .v-snackbar:not(.v-snackbar--top):not(.v-snackbar--center) {
+  margin-bottom: calc(80px + 16px + 56px + 8px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 移动端屏宽不足 344px + 边距时允许 Snackbar 收窄 */
+.is-mobile .v-snackbar__wrapper {
+  min-width: 0;
+  width: 100%;
+}
+
 /* 页面标题由顶栏显示，页内大标题隐藏 */
 .is-mobile .md-page-header {
   display: none;
