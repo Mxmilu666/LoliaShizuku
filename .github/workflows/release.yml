@@ -13,6 +13,7 @@ permissions:
 env:
   CGO_ENABLED: 1
   WAILS_SKIP_UPDATE_CHECK: 1
+  WAILS_VERSION: v3.0.0-beta.28
 
 jobs:
   build:
@@ -65,6 +66,13 @@ jobs:
         if: matrix.name != 'windows-arm64'
         uses: oven-sh/setup-bun@v2
 
+      # Bun 在 windows-arm64 runner 上不可用，改用 npm 构建前端
+      - name: Setup Node (windows-arm64)
+        if: matrix.name == 'windows-arm64'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         shell: bash
@@ -87,7 +95,7 @@ jobs:
       - name: Install Wails CLI
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Verify NSIS (Windows)
@@ -118,14 +126,17 @@ jobs:
 
           LDFLAGS="-X github.com/Mxmilu666/LoliaShizuku/backend/version.Version=${VERSION} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitCommit=${COMMIT} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitBranch=${TAG} -X github.com/Mxmilu666/LoliaShizuku/backend/version.BuildTime=${BUILD_TIME}"
 
+          PACKAGE_MANAGER="bun"
           if [[ "${{ matrix.name }}" == "windows-arm64" ]]; then
-            wails build -clean -nsis -s -ldflags "$LDFLAGS"
-          elif [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
-            wails build -clean -nsis -ldflags "$LDFLAGS"
-          elif [[ "${{ matrix.artifact_os }}" == "linux" ]]; then
-            wails build -clean -tags webkit2_41 -ldflags "$LDFLAGS"
+            PACKAGE_MANAGER="npm"
+          fi
+
+          if [[ "${{ matrix.artifact_os }}" == "linux" ]]; then
+            # 使用 GTK3 + WebKitGTK 4.1（Wails v3 默认是 GTK4 + WebKitGTK 6.0）
+            wails3 build PACKAGE_MANAGER="$PACKAGE_MANAGER" EXTRA_TAGS=gtk3 EXTRA_LDFLAGS="$LDFLAGS"
           else
-            wails build -clean -ldflags "$LDFLAGS"
+            # Windows: bin/LoliaShizuku.exe + NSIS 安装包；macOS: bin/LoliaShizuku.app
+            wails3 package PACKAGE_MANAGER="$PACKAGE_MANAGER" EXTRA_LDFLAGS="$LDFLAGS"
           fi
 
       - name: Package artifact
@@ -141,9 +152,9 @@ jobs:
           NFPM_ARCH="${{ matrix.nfpm_arch }}"
 
           if [[ "${{ matrix.artifact_os }}" == "linux" ]]; then
-            BIN_PATH="$(find build/bin -maxdepth 1 -type f -name 'LoliaShizuku' | head -n 1 || true)"
+            BIN_PATH="$(find bin -maxdepth 1 -type f -name 'LoliaShizuku' | head -n 1 || true)"
             if [[ -z "${BIN_PATH}" ]]; then
-              echo "linux binary not found in build/bin"
+              echo "linux binary not found in bin"
               exit 1
             fi
             ICON_SRC="build/appicon.png"
@@ -171,7 +182,7 @@ jobs:
             fi
 
             ARCHIVE="LoliaShizuku${REF_PART}-linux-${ARTIFACT_ARCH}.tar.gz"
-            tar -czf "dist/${ARCHIVE}" -C build/bin .
+            tar -czf "dist/${ARCHIVE}" -C bin .
 
             sed \
               -e "s|__NFPM_ARCH__|${NFPM_ARCH}|g" \
@@ -191,19 +202,16 @@ jobs:
           fi
 
           if [[ "${{ matrix.artifact_os }}" == "windows" ]]; then
-            PORTABLE_EXE="$(find build/bin -maxdepth 1 -type f -iname 'LoliaShizuku.exe' | head -n 1 || true)"
-            INSTALLER_EXE="$(find build -type f -iname '*.exe' | grep -Evi '/LoliaShizuku\.exe$' | grep -Ei '(installer|setup|nsis)' | head -n 1 || true)"
-            if [[ -z "${INSTALLER_EXE}" ]]; then
-              INSTALLER_EXE="$(find build -type f -iname '*.exe' | grep -Evi '/LoliaShizuku\.exe$' | head -n 1 || true)"
-            fi
+            PORTABLE_EXE="$(find bin -maxdepth 1 -type f -iname 'LoliaShizuku.exe' | head -n 1 || true)"
+            INSTALLER_EXE="$(find bin -maxdepth 1 -type f -iname 'LoliaShizuku-*-installer.exe' | head -n 1 || true)"
             if [[ -z "${PORTABLE_EXE}" ]]; then
-              echo "portable exe not found in build/bin"
+              echo "portable exe not found in bin"
               exit 1
             fi
             if [[ -z "${INSTALLER_EXE}" ]]; then
-              echo "nsis installer exe not found in build/"
-              echo "available exe files under build/:"
-              find build -type f -iname '*.exe' -print || true
+              echo "nsis installer exe not found in bin/"
+              echo "available exe files under bin/:"
+              find bin -type f -iname '*.exe' -print || true
               exit 1
             fi
             cp "${PORTABLE_EXE}" "dist/LoliaShizuku${REF_PART}-windows-${ARTIFACT_ARCH}.exe"
@@ -212,9 +220,9 @@ jobs:
           fi
 
           if [[ "${{ matrix.artifact_os }}" == "macos" ]]; then
-            APP_PATH="$(find build/bin -maxdepth 1 -name '*.app' | head -n 1 || true)"
+            APP_PATH="$(find bin -maxdepth 1 -name 'LoliaShizuku.app' | head -n 1 || true)"
             if [[ -z "${APP_PATH}" ]]; then
-              echo "macOS .app not found in build/bin"
+              echo "macOS .app not found in bin"
               exit 1
             fi
             DMG_PATH="dist/LoliaShizuku${REF_PART}-macos-${ARTIFACT_ARCH}.dmg"
@@ -251,10 +259,108 @@ jobs:
             !dist/nfpm.yaml
           if-no-files-found: error
 
+  build-android:
+    name: Build android-arm64
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      # Gradle 9.2 只能运行在 JDK 17–25 上
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # GitHub 托管的 ubuntu runner 已预装 Android SDK 与 NDK（ANDROID_HOME / ANDROID_NDK_HOME），
+      # 缺少的 SDK Platform / Build-Tools 由 Gradle 在构建时自动下载
+      - name: Show Android toolchain
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-<unset>}"
+          ls "${ANDROID_HOME}/ndk" || true
+
+      # 配置了签名密钥时使用正式签名；否则使用 debug 证书（每台 runner 的 debug 证书不同，无法覆盖安装）
+      - name: Prepare signing keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -n "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.keystore"
+            echo "ANDROID_KEYSTORE_FILE=${RUNNER_TEMP}/release.keystore" >> "$GITHUB_ENV"
+            echo "Using release keystore from secrets"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the APK will be signed with a debug certificate"
+          fi
+
+      - name: Build APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          COMMIT="$(git rev-parse --short=12 HEAD)"
+          BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${TAG}" == v* ]]; then
+            VERSION="${TAG#v}"
+          else
+            VERSION="dev-${COMMIT}"
+          fi
+
+          LDFLAGS="-X github.com/Mxmilu666/LoliaShizuku/backend/version.Version=${VERSION} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitCommit=${COMMIT} -X github.com/Mxmilu666/LoliaShizuku/backend/version.GitBranch=${TAG} -X github.com/Mxmilu666/LoliaShizuku/backend/version.BuildTime=${BUILD_TIME}"
+
+          export APP_VERSION_NAME="${VERSION}"
+          export APP_VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          wails3 task android:package ARCH=arm64 PACKAGE_MANAGER=bun EXTRA_LDFLAGS="$LDFLAGS"
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          REF_SAFE="$(echo "${GITHUB_REF_NAME}" | sed 's#[^A-Za-z0-9._-]#-#g')"
+          REF_PART="-${REF_SAFE}"
+          if [[ "${REF_SAFE}" == "main" ]]; then
+            REF_PART=""
+          fi
+          if [[ ! -f bin/LoliaShizuku.apk ]]; then
+            echo "APK not found in bin/"
+            exit 1
+          fi
+          cp bin/LoliaShizuku.apk "dist/LoliaShizuku${REF_PART}-android-arm64.apk"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android-arm64
+          path: dist/*
+          if-no-files-found: error
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-android]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
