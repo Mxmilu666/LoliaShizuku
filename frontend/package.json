@@ -5,21 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:dev": "vite build --minify false --mode development",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@fontsource/roboto": "^5.2.9",
+    "@material/material-color-utilities": "0.4.0",
     "@tailwindcss/vite": "^4.1.18",
     "@unovis/vue": "^1.6.4",
     "@vueuse/core": "^14.2.1",
+    "@wailsio/runtime": "3.0.0-beta.28",
+    "ansi_up": "6.0.6",
+    "dompurify": "3.4.16",
     "echarts": "^6.0.0",
+    "markdown-it": "15.0.2",
+    "pinia": "^3.0.4",
     "tailwindcss": "^4.1.18",
     "unplugin-fonts": "^1.4.0",
     "vue": "^3.5.28",
-    "pinia": "^3.0.4",
     "vue-router": "^5.0.2",
-    "vuetify": "^3.11.8"
+    "vuetify": "4.2.4"
   },
   "devDependencies": {
     "@babel/types": "^7.29.0",

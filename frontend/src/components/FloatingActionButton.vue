@@ -43,10 +43,10 @@ watch(
 </script>
 
 <template>
+  <!-- MD3 extended FAB：primary container、16dp 圆角 -->
   <v-fab
     v-if="showFab"
-    class="fab-global"
-    color="primary"
+    class="md-fab"
     size="large"
     location="bottom end"
     prepend-icon="fas fa-terminal"
@@ -57,10 +57,21 @@ watch(
 </template>
 
 <style scoped>
-.fab-global {
+.md-fab {
   position: fixed !important;
   bottom: 24px !important;
   right: 24px !important;
   z-index: 1000;
+}
+
+.md-fab :deep(.v-btn) {
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 16px;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 4px 8px 3px rgba(0, 0, 0, 0.15);
 }
 </style>
