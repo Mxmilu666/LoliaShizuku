@@ -8,7 +8,6 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
-import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
@@ -38,8 +37,6 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -87,9 +84,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        // 记录系统 DNS，供 Go 侧注入 frpc 配置（见 startSystemDnsTracking）
-        startSystemDnsTracking();
 
         // Initialize the native Go library
         bridge = new WailsBridge(this);
@@ -807,7 +801,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        stopSystemDnsTracking();
         unregisterSystemEventReceivers();
         if (bridge != null) {
             bridge.shutdown();
@@ -823,84 +816,6 @@ public class MainActivity extends AppCompatActivity {
             webView.goBack();
         } else {
             super.onBackPressed();
-        }
-    }
-
-    // MARK: - System DNS
-
-    /**
-     * Android 版 frpc 以纯 Go（CGO_ENABLED=0）编译，读不到系统 DNS（Android 没有 /etc/resolv.conf），
-     * 会退回到不可用的 [::1]:53 / 8.8.8.8。这里把当前默认网络的 DNS 服务器写入
-     * filesDir/system_dns（每行一个），由 Go 侧在启动 frpc 时写入配置的 dnsServer。
-     */
-    private static final String SYSTEM_DNS_FILE = "system_dns";
-    private ConnectivityManager.NetworkCallback systemDnsCallback;
-
-    private void startSystemDnsTracking() {
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm == null) {
-            return;
-        }
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                Network active = cm.getActiveNetwork();
-                if (active != null) {
-                    writeSystemDns(cm.getLinkProperties(active));
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                systemDnsCallback = new ConnectivityManager.NetworkCallback() {
-                    @Override
-                    public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
-                        writeSystemDns(linkProperties);
-                    }
-                };
-                cm.registerDefaultNetworkCallback(systemDnsCallback);
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "track system dns failed", e);
-        }
-    }
-
-    private void stopSystemDnsTracking() {
-        if (systemDnsCallback == null) {
-            return;
-        }
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm != null) {
-            try {
-                cm.unregisterNetworkCallback(systemDnsCallback);
-            } catch (Exception ignored) {
-            }
-        }
-        systemDnsCallback = null;
-    }
-
-    private void writeSystemDns(@Nullable LinkProperties linkProperties) {
-        if (linkProperties == null) {
-            return;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (InetAddress address : linkProperties.getDnsServers()) {
-            String host = address.getHostAddress();
-            if (host != null && !host.isEmpty()) {
-                sb.append(host).append('\n');
-            }
-        }
-        if (sb.length() == 0) {
-            return;
-        }
-        // 先写临时文件再重命名，避免 Go 侧读到写了一半的内容
-        File target = new File(getFilesDir(), SYSTEM_DNS_FILE);
-        File tmp = new File(getFilesDir(), SYSTEM_DNS_FILE + ".tmp");
-        try (FileOutputStream out = new FileOutputStream(tmp)) {
-            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            Log.w(TAG, "write system dns failed", e);
-            return;
-        }
-        if (!tmp.renameTo(target)) {
-            Log.w(TAG, "rename system dns file failed");
         }
     }
 }

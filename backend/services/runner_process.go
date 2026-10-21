@@ -16,7 +16,7 @@ import (
 	"github.com/Mxmilu666/LoliaShizuku/backend/models"
 )
 
-// 以子进程方式运行已安装的 frpc 二进制（frpc -t id:token）。
+// 以子进程方式运行已安装的 frpc 二进制（frpc -t id:token），所有平台一致。
 // Android 端同样如此：应用 targetSdkVersion 为 28（与 Termux 相同），允许执行应用私有目录中的二进制。
 
 type runnerPlatformState struct {
@@ -72,6 +72,7 @@ func (s *CenterService) StartRunner(tunnelNames []string) (*models.RunnerRuntime
 	cmd := exec.CommandContext(runCtx, binaryPath, cmdArgs...)
 	// 输出经管道读取时 frpc 默认不着色，强制输出 ANSI 颜色，由前端渲染日志高亮
 	cmd.Env = append(os.Environ(), "CLICOLOR_FORCE=1")
+	cmd.Env = append(cmd.Env, runnerExtraEnv(binaryPath)...)
 	configureBackgroundProcess(cmd)
 
 	stdout, err := cmd.StdoutPipe()

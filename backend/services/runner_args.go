@@ -1,5 +1,3 @@
-//go:build !android
-
 package services
 
 import (
@@ -11,7 +9,7 @@ import (
 
 var runnerTokenArgPattern = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9._~+/=-]+$`)
 
-// buildRunnerArgs 桌面端：frpc -t id:token，由 frpc 自行向中心端拉取配置。
+// buildRunnerArgs 所有平台统一使用 frpc -t id:token，由 frpc 自行向中心端拉取配置。
 func (s *CenterService) buildRunnerArgs(_ context.Context, binaryPath string, targets []runnerTarget) ([]string, string, error) {
 	tokenArgs := make([]string, 0, len(targets))
 	args := make([]string, 0, len(targets)*2)

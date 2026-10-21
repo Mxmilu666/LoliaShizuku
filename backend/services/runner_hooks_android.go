@@ -4,6 +4,8 @@ package services
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -17,4 +19,10 @@ func onRunnerStarted(tunnelCount int) {
 
 func onRunnerStopped() {
 	application.Android.StopForegroundService()
+}
+
+// runnerExtraEnv 清理旧版本以 frpc -c 启动时写入的配置文件（含隧道 token），现已统一使用 frpc -t。
+func runnerExtraEnv(binaryPath string) []string {
+	_ = os.RemoveAll(filepath.Join(filepath.Dir(filepath.Dir(binaryPath)), "run"))
+	return nil
 }
