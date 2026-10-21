@@ -41,6 +41,24 @@ func (s *TokenService) BeginOAuthLogin() (bool, error) {
 	return true, nil
 }
 
+// StartDeviceLogin 发起设备授权（RFC 8628），返回需要用户在浏览器中输入的用户码。
+func (s *TokenService) StartDeviceLogin() (*DeviceLoginInfo, error) {
+	return startDeviceLogin()
+}
+
+// WaitDeviceLogin 等待用户在浏览器中完成设备授权，成功后保存 token。
+func (s *TokenService) WaitDeviceLogin() (bool, error) {
+	if err := waitDeviceLogin(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// CancelDeviceLogin 取消进行中的设备授权。
+func (s *TokenService) CancelDeviceLogin() {
+	cancelDeviceLogin()
+}
+
 // ClearOAuthToken removes OAuth token from keyring.
 func (s *TokenService) ClearOAuthToken() error {
 	return ClearOAuthToken()

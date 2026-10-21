@@ -10,11 +10,22 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
 /**
  * BeginOAuthLogin starts OAuth2 Authorization Code login and stores token in keyring.
  */
 export function BeginOAuthLogin(): $CancellablePromise<boolean> {
     return $Call.ByID(2072994584);
+}
+
+/**
+ * CancelDeviceLogin 取消进行中的设备授权。
+ */
+export function CancelDeviceLogin(): $CancellablePromise<void> {
+    return $Call.ByID(4277067008);
 }
 
 /**
@@ -29,4 +40,18 @@ export function ClearOAuthToken(): $CancellablePromise<void> {
  */
 export function HasOAuthToken(): $CancellablePromise<boolean> {
     return $Call.ByID(981406973);
+}
+
+/**
+ * StartDeviceLogin 发起设备授权（RFC 8628），返回需要用户在浏览器中输入的用户码。
+ */
+export function StartDeviceLogin(): $CancellablePromise<$models.DeviceLoginInfo | null> {
+    return $Call.ByID(2747242196);
+}
+
+/**
+ * WaitDeviceLogin 等待用户在浏览器中完成设备授权，成功后保存 token。
+ */
+export function WaitDeviceLogin(): $CancellablePromise<boolean> {
+    return $Call.ByID(1980349713);
 }

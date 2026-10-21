@@ -15,5 +15,6 @@ export {
 };
 
 export type {
+    DeviceLoginInfo,
     WallpaperPixels
 } from "./models.js";

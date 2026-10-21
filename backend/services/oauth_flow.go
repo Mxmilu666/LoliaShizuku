@@ -19,6 +19,7 @@ import (
 const (
 	defaultOAuthAuthorizeURL = "https://dash.lolia.link/oauth/authorize"
 	defaultOAuthTokenURL     = "https://api.lolia.link/api/v1/oauth2/token"
+	defaultOAuthDeviceURL    = "https://api.lolia.link/api/v1/oauth2/device/code"
 	defaultOAuthRedirectURL  = "http://localhost:1145"
 	defaultOAuthScope        = "all"
 	defaultOAuthClientID     = "mdn2kiogechzveez"
@@ -48,6 +49,11 @@ func resolveOAuthConfig() (*oauth2.Config, error) {
 		tokenURL = defaultOAuthTokenURL
 	}
 
+	deviceAuthURL := strings.TrimSpace(os.Getenv("LOLIA_OAUTH_DEVICE_URL"))
+	if deviceAuthURL == "" {
+		deviceAuthURL = defaultOAuthDeviceURL
+	}
+
 	redirectURL := strings.TrimSpace(os.Getenv("LOLIA_OAUTH_REDIRECT_URL"))
 	if redirectURL == "" {
 		redirectURL = defaultOAuthRedirectURL
@@ -58,9 +64,10 @@ func resolveOAuthConfig() (*oauth2.Config, error) {
 		RedirectURL: redirectURL,
 		Scopes:      strings.Fields(defaultOAuthScope),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:   authorizeURL,
-			TokenURL:  tokenURL,
-			AuthStyle: oauth2.AuthStyleInParams,
+			AuthURL:       authorizeURL,
+			TokenURL:      tokenURL,
+			DeviceAuthURL: deviceAuthURL,
+			AuthStyle:     oauth2.AuthStyleInParams,
 		},
 	}, nil
 }
