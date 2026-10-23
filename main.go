@@ -43,6 +43,7 @@ func main() {
 	frpcService := services.NewFrpcService()
 	systemColorService := services.NewSystemColorService()
 	browserService := services.NewBrowserService()
+	portScanService := services.NewPortScanService()
 
 	// Create application with options
 	wailsApp := application.New(application.Options{
@@ -56,6 +57,7 @@ func main() {
 			application.NewService(frpcService),
 			application.NewService(systemColorService),
 			application.NewService(browserService),
+			application.NewService(portScanService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

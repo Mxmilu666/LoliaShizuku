@@ -4,6 +4,7 @@
 import * as BrowserService from "./browserservice.js";
 import * as CenterService from "./centerservice.js";
 import * as FrpcService from "./frpcservice.js";
+import * as PortScanService from "./portscanservice.js";
 import * as PreferencesService from "./preferencesservice.js";
 import * as SystemColorService from "./systemcolorservice.js";
 import * as TokenService from "./tokenservice.js";
@@ -11,6 +12,7 @@ export {
     BrowserService,
     CenterService,
     FrpcService,
+    PortScanService,
     PreferencesService,
     SystemColorService,
     TokenService
@@ -18,5 +20,6 @@ export {
 
 export type {
     DeviceLoginInfo,
+    ListeningPort,
     WallpaperPixels
 } from "./models.js";

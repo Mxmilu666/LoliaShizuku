@@ -16,6 +16,49 @@ export interface DeviceLoginInfo {
 }
 
 /**
+ * ListeningPort 本机正在监听的端口。
+ */
+export interface ListeningPort {
+    /**
+     * tcp / udp
+     */
+    "protocol": string;
+    "port": number;
+
+    /**
+     * 绑定地址
+     */
+    "address": string;
+
+    /**
+     * 建议填写到隧道的本地 IP
+     */
+    "local_ip": string;
+    "pid": number;
+    "process": string;
+
+    /**
+     * 由连接探测发现（无进程信息）
+     */
+    "probed": boolean;
+
+    /**
+     * 通过协议识别出的服务，如 minecraft-java / minecraft-bedrock
+     */
+    "service": string;
+
+    /**
+     * 服务自报的名称，如 Minecraft 世界名 / MOTD
+     */
+    "title": string;
+
+    /**
+     * 位于局域网内其他设备
+     */
+    "remote": boolean;
+}
+
+/**
  * WallpaperPixels 是缩小后的壁纸像素，供前端按 MD3（莫奈）算法提取种子色。
  */
 export interface WallpaperPixels {

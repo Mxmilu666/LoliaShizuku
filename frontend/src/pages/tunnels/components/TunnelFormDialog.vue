@@ -19,6 +19,14 @@ import {
   type TunnelType,
 } from "@/utils/tunnel";
 import { isMobile, useFullscreenSystemBars } from "@/utils/platform";
+import {
+  describeService,
+  describeServiceDetail,
+  guessService,
+  isLikelyService,
+  listListeningPorts,
+  type ListeningPort,
+} from "@/utils/localService";
 
 const props = defineProps<{
   mode: "create" | "edit";
@@ -66,12 +74,135 @@ const form = reactive({
 });
 
 const isEdit = computed(() => props.mode === "edit");
+
+// 新建引导：1 本地服务 → 2 类型与节点 → 3 访问方式
+const wizardSteps = [
+  { title: "本地服务", description: "选择要映射到公网的本机服务，或手动填写地址" },
+  { title: "类型与节点", description: "选择隧道类型和承载流量的节点" },
+  { title: "访问方式", description: "设置隧道名称与公网访问方式" },
+];
+const step = ref(1);
+const bodyRef = ref<{ $el: HTMLElement } | null>(null);
+
+watch(step, () => {
+  bodyRef.value?.$el.scrollTo({ top: 0 });
+});
+
+// 本地监听端口扫描
+const scanning = ref(false);
+const scanError = ref("");
+const listeningPorts = ref<ListeningPort[]>([]);
+const showAllPorts = ref(false);
+const portQuery = ref("");
+// 选中的本地服务协议，用于限制可选的隧道类型；手动填写时为空
+const localProtocol = ref<"tcp" | "udp" | "">("");
+// 由所选服务自动填入的名称，用户未改动时随选择更新
+let autoRemark = "";
+
+// 局域网其他设备上可能有相同端口的服务，键需包含地址
+const portKey = (item: ListeningPort) => `${item.protocol}/${item.port}/${item.local_ip}`;
+
+const visiblePorts = computed(() => {
+  const query = portQuery.value.trim().toLowerCase();
+  return listeningPorts.value
+    .filter((item) => {
+      if (query) {
+        return [String(item.port), item.process, item.title, describeService(item), item.protocol]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      }
+      return showAllPorts.value || isLikelyService(item);
+    })
+    // 协议发现的服务（如 Minecraft 局域网世界）> 识别出的服务 > 其他，同组按端口排序
+    .sort(
+      (a, b) =>
+        Number(Boolean(b.service)) - Number(Boolean(a.service)) ||
+        Number(Boolean(guessService(b))) - Number(Boolean(guessService(a))) ||
+        a.port - b.port,
+    );
+});
+
+const hiddenPortCount = computed(
+  () => listeningPorts.value.filter((item) => !isLikelyService(item)).length,
+);
+
+const selectedPortKey = computed(() => {
+  const match = listeningPorts.value.find(
+    (item) =>
+      item.protocol === localProtocol.value &&
+      String(item.port) === String(form.localPort).trim() &&
+      item.local_ip === form.localIp.trim(),
+  );
+  return match ? portKey(match) : "";
+});
+
+const scanPorts = async () => {
+  scanning.value = true;
+  scanError.value = "";
+  try {
+    listeningPorts.value = await listListeningPorts();
+  } catch (error) {
+    scanError.value = error instanceof Error ? error.message : "扫描本地端口失败";
+  } finally {
+    scanning.value = false;
+  }
+};
+
+const pickPort = (item: ListeningPort) => {
+  form.localIp = item.local_ip || "127.0.0.1";
+  form.localPort = String(item.port);
+  localProtocol.value = item.protocol;
+
+  // 按服务推荐隧道类型：UDP 服务只能用 UDP；网页服务在有已验证域名时推荐 HTTP
+  const guess = guessService(item);
+  if (item.protocol === "udp") {
+    form.type = "udp";
+  } else if (guess?.web && domainSuggestions.value.length > 0) {
+    form.type = "http";
+  } else {
+    form.type = "tcp";
+  }
+
+  const name = (guess?.name || item.process || "").slice(0, 50);
+  if (name && (!form.remark.trim() || form.remark === autoRemark)) {
+    form.remark = name;
+    autoRemark = name;
+  }
+};
+
+// 手动修改地址后不再对应已选服务，解除协议限制
+watch(
+  () => [form.localIp, form.localPort],
+  () => {
+    if (localProtocol.value && !selectedPortKey.value) {
+      localProtocol.value = "";
+    }
+  },
+);
+
+const isTypeDisabled = (type: TunnelType) => {
+  if (isEdit.value || !localProtocol.value) return false;
+  return localProtocol.value === "udp" ? type !== "udp" : type === "udp";
+};
+
+const nextStep = async () => {
+  errorMessage.value = "";
+  const result = await formRef.value?.validate();
+  if (!result?.valid) return;
+  step.value = Math.min(step.value + 1, wizardSteps.length);
+};
 const isHTTP = computed(() => isHTTPType(form.type));
 const isHTTPS = computed(() => form.type === "https");
 
 const resetForm = () => {
   errorMessage.value = "";
   showAdvanced.value = false;
+  step.value = 1;
+  showAllPorts.value = false;
+  portQuery.value = "";
+  localProtocol.value = "";
+  autoRemark = "";
   const tunnel = props.tunnel;
   if (isEdit.value && tunnel) {
     const config = tunnel.config;
@@ -103,6 +234,7 @@ const resetForm = () => {
   form.proxyProtocolVersion = PROXY_PROTOCOL_OFF;
   form.autoTLS = false;
   form.httpRedirect = false;
+  void scanPorts();
 };
 
 watch(open, (value) => {
@@ -231,6 +363,10 @@ const buildUpdatePayload = (tunnel: TunnelItem): UpdateTunnelRequest => {
 };
 
 const handleSubmit = async () => {
+  if (!isEdit.value && step.value < wizardSteps.length) {
+    await nextStep();
+    return;
+  }
   errorMessage.value = "";
   const result = await formRef.value?.validate();
   if (!result?.valid) return;
@@ -278,16 +414,33 @@ const handleSubmit = async () => {
       <!-- 标题 -->
       <div class="md-dialog-header">
         <h2 class="text-headline-small">{{ isEdit ? "编辑隧道" : "新建隧道" }}</h2>
-        <p class="text-body-medium md-on-surface-variant mt-2">
-          {{
-            isEdit
-              ? "类型、节点与远程端口创建后不可修改"
-              : "选择隧道类型和节点，把本地服务映射到公网"
-          }}
+        <p v-if="isEdit" class="text-body-medium md-on-surface-variant mt-2">
+          类型、节点与远程端口创建后不可修改
         </p>
+        <template v-else>
+          <!-- 步骤指示：已完成 / 当前步骤高亮 -->
+          <div class="wizard-steps mt-4" role="list">
+            <div
+              v-for="(item, index) in wizardSteps"
+              :key="item.title"
+              class="wizard-step"
+              :class="{
+                'wizard-step--active': index + 1 === step,
+                'wizard-step--done': index + 1 < step,
+              }"
+              role="listitem"
+            >
+              <span class="wizard-step-bar" />
+              <span class="text-label-medium">{{ index + 1 }}. {{ item.title }}</span>
+            </div>
+          </div>
+          <p class="text-body-medium md-on-surface-variant mt-3">
+            {{ wizardSteps[step - 1].description }}
+          </p>
+        </template>
       </div>
 
-      <v-card-text class="md-dialog-body">
+      <v-card-text ref="bodyRef" class="md-dialog-body" :class="{ 'md-dialog-body--wizard': !isEdit && !isMobile }">
         <v-alert
           v-if="errorMessage"
           type="error"
@@ -302,7 +455,109 @@ const handleSubmit = async () => {
         </v-alert>
 
         <v-form ref="formRef" @submit.prevent="handleSubmit">
-          <!-- 隧道类型 -->
+          <!-- 步骤 1：选择本地服务 -->
+          <template v-if="!isEdit && step === 1">
+            <div class="d-flex align-center mb-3">
+              <div class="md-section-label text-title-small mb-0">检测到的本地服务</div>
+              <v-spacer />
+              <v-btn
+                variant="text"
+                size="small"
+                prepend-icon="fas fa-rotate"
+                :loading="scanning"
+                @click="scanPorts"
+              >
+                重新扫描
+              </v-btn>
+            </div>
+
+            <v-text-field
+              v-if="listeningPorts.length > 6"
+              v-model="portQuery"
+              placeholder="搜索端口 / 进程名"
+              prepend-inner-icon="fas fa-magnifying-glass"
+              density="compact"
+              hide-details
+              clearable
+              class="mb-3"
+            />
+
+            <div v-if="scanning && listeningPorts.length === 0" class="port-empty md-on-surface-variant">
+              <v-progress-circular indeterminate size="20" width="2" />
+              <span class="text-body-medium">正在扫描本机监听端口…</span>
+            </div>
+            <div v-else-if="scanError" class="port-empty md-on-surface-variant">
+              <span class="text-body-medium">{{ scanError }}，请手动填写本地地址</span>
+            </div>
+            <div v-else-if="visiblePorts.length === 0" class="port-empty md-on-surface-variant">
+              <span class="text-body-medium">
+                {{ portQuery ? "没有匹配的端口" : "未检测到常见服务，可手动填写本地地址" }}
+              </span>
+            </div>
+            <div v-else class="port-list" role="radiogroup" aria-label="本地服务">
+              <div
+                v-for="item in visiblePorts"
+                :key="portKey(item)"
+                class="md-option port-option"
+                :class="{ 'md-option--selected': selectedPortKey === portKey(item) }"
+                role="radio"
+                :aria-checked="selectedPortKey === portKey(item)"
+                tabindex="0"
+                @click="pickPort(item)"
+                @keydown.enter.space.prevent="pickPort(item)"
+              >
+                <div class="md-icon-container port-icon">
+                  <v-icon size="16">{{ guessService(item)?.icon || "fas fa-network-wired" }}</v-icon>
+                </div>
+                <div class="flex-grow-1 min-w-0">
+                  <div class="text-body-large text-truncate">{{ describeService(item) }}</div>
+                  <div class="text-body-small md-on-surface-variant text-truncate">
+                    {{ describeServiceDetail(item) }}
+                  </div>
+                </div>
+                <div class="port-meta">
+                  <span class="text-title-medium md-mono">{{ item.port }}</span>
+                  <span class="text-label-small md-on-surface-variant">{{ item.protocol.toUpperCase() }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-if="isMobile" class="text-body-small md-on-surface-variant mt-3">
+              Android 不允许应用读取完整的端口列表，这里仅探测常见的 TCP 端口和 Minecraft 服务器；其他 UDP 服务请手动填写。
+            </p>
+            <button
+              v-if="!portQuery && hiddenPortCount > 0"
+              type="button"
+              class="md-expand text-label-large mt-3"
+              @click="showAllPorts = !showAllPorts"
+            >
+              {{ showAllPorts ? "只显示常见服务" : `显示全部（另有 ${hiddenPortCount} 个系统 / 临时端口）` }}
+              <v-icon size="12">{{ showAllPorts ? "fas fa-chevron-up" : "fas fa-chevron-down" }}</v-icon>
+            </button>
+
+            <v-divider class="my-4 md-divider" />
+            <div class="md-section-label text-title-small">本地地址</div>
+            <div class="local-grid">
+              <v-text-field
+                v-model="form.localIp"
+                label="本地 IP"
+                placeholder="127.0.0.1"
+                :rules="rules.localIp"
+              />
+              <v-text-field
+                v-model="form.localPort"
+                label="本地端口"
+                placeholder="例如：25565"
+                :rules="rules.localPort"
+                inputmode="numeric"
+              />
+            </div>
+            <p class="text-body-small md-on-surface-variant">
+              服务运行在局域网其他设备上时，填写该设备的 IP 即可。
+            </p>
+          </template>
+
+          <!-- 隧道类型（编辑：只读展示；新建：步骤 2） -->
+          <template v-if="isEdit || step === 2">
           <div class="md-section-label text-title-small">隧道类型</div>
           <div v-if="isEdit" class="d-flex align-center flex-wrap ga-2 mb-6">
             <v-chip variant="outlined" class="md-assist-chip" :prepend-icon="getTypeMeta(form.type).icon">
@@ -318,15 +573,20 @@ const handleSubmit = async () => {
               :key="item.value"
               v-slot="{ isSelected, toggle }"
               :value="item.value"
+              :disabled="isTypeDisabled(item.value)"
             >
               <div
                 class="md-option"
-                :class="{ 'md-option--selected': isSelected }"
+                :class="{
+                  'md-option--selected': isSelected,
+                  'md-option--disabled': isTypeDisabled(item.value),
+                }"
                 role="radio"
                 :aria-checked="isSelected"
+                :aria-disabled="isTypeDisabled(item.value)"
                 tabindex="0"
-                @click="toggle"
-                @keydown.enter.space.prevent="toggle"
+                @click="!isTypeDisabled(item.value) && toggle?.()"
+                @keydown.enter.space.prevent="!isTypeDisabled(item.value) && toggle?.()"
               >
                 <div class="d-flex align-center ga-2">
                   <v-icon size="14">{{ item.icon }}</v-icon>
@@ -338,9 +598,12 @@ const handleSubmit = async () => {
               </div>
             </v-item>
           </v-item-group>
+          <p v-if="!isEdit && localProtocol" class="text-body-small md-on-surface-variant mt-n4 mb-6">
+            所选本地服务使用 {{ localProtocol.toUpperCase() }}，已禁用不兼容的类型。
+          </p>
 
           <!-- 节点 -->
-          <template v-if="!isEdit">
+          <template v-if="!isEdit && step === 2">
             <div class="md-section-label text-title-small">节点</div>
             <v-autocomplete
               v-model="form.nodeId"
@@ -406,8 +669,10 @@ const handleSubmit = async () => {
               该节点需要完成实名认证后才能创建隧道。
             </v-alert>
           </template>
+          </template>
 
-          <!-- 基础参数 -->
+          <!-- 基础参数（编辑；新建：步骤 3） -->
+          <template v-if="isEdit || step === 3">
           <div class="md-section-label text-title-small">基础参数</div>
           <v-text-field
             v-model="form.remark"
@@ -519,6 +784,7 @@ const handleSubmit = async () => {
           <p v-else class="text-body-small md-on-surface-variant mt-4">
             连接协议、Proxy Protocol、Auto TLS 等高级配置可在创建后通过「编辑」设置。
           </p>
+          </template>
         </v-form>
       </v-card-text>
 
@@ -527,7 +793,31 @@ const handleSubmit = async () => {
         <v-btn variant="text" color="primary" :disabled="submitting" @click="open = false">
           取消
         </v-btn>
-        <v-btn variant="text" color="primary" :loading="submitting" @click="handleSubmit">
+        <v-spacer v-if="!isEdit" />
+        <v-btn
+          v-if="!isEdit && step > 1"
+          variant="text"
+          color="primary"
+          :disabled="submitting"
+          @click="step -= 1"
+        >
+          上一步
+        </v-btn>
+        <v-btn
+          v-if="!isEdit && step < wizardSteps.length"
+          variant="flat"
+          color="primary"
+          @click="nextStep"
+        >
+          下一步
+        </v-btn>
+        <v-btn
+          v-else
+          :variant="isEdit ? 'text' : 'flat'"
+          color="primary"
+          :loading="submitting"
+          @click="handleSubmit"
+        >
           {{ isEdit ? "保存" : "创建" }}
         </v-btn>
       </div>
@@ -543,6 +833,11 @@ const handleSubmit = async () => {
 
 .md-dialog-body {
   padding: 8px 24px 0 !important;
+}
+
+/* 引导各步骤内容高度不同，固定最小高度避免对话框随步骤跳动 */
+.md-dialog-body--wizard {
+  min-height: 420px;
 }
 
 .md-dialog-actions {
@@ -593,6 +888,90 @@ const handleSubmit = async () => {
   border-color: transparent;
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
+}
+
+.md-option--disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.md-option--disabled:hover {
+  background: none;
+}
+
+/* 步骤指示：MD3 线性进度分段 */
+.wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--md-on-surface-variant);
+}
+
+.wizard-step-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--md-surface-container-highest);
+}
+
+.wizard-step--done .wizard-step-bar,
+.wizard-step--active .wizard-step-bar {
+  background: rgb(var(--v-theme-primary));
+}
+
+.wizard-step--active {
+  color: rgb(var(--v-theme-primary));
+}
+
+.port-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.port-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.port-icon {
+  flex-shrink: 0;
+}
+
+.port-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.port-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--md-outline-variant);
+  text-align: center;
+}
+
+.local-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.min-w-0 {
+  min-width: 0;
 }
 
 .md-assist-chip {
