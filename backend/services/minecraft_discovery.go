@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/ipv4"
 )
 
 // Minecraft 局域网发现：
@@ -80,6 +82,7 @@ func listenMinecraftJavaLAN(ctx context.Context, duration time.Duration) []minec
 	defer func() {
 		_ = conn.Close()
 	}()
+	setupMulticastListener(conn, group.IP)
 
 	deadline := time.Now().Add(duration)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
@@ -243,4 +246,27 @@ func isLocalIP(ip net.IP) bool {
 		}
 	}
 	return false
+}
+
+// setupMulticastListener 让组播监听能收到本机游戏发出的广播：
+//   - 重新开启 IP_MULTICAST_LOOP：ListenMulticastUDP 会将其关闭。该选项在 Linux / macOS 上只影响本套接字
+//     发出的组播，但在 Windows（Winsock）上作用于接收方向——关闭后收不到本机任何进程发出的组播，
+//     游戏与本应用在同一台 Windows 电脑上时就扫描不到；
+//   - 在所有启用的多播网卡上加入组播组：ListenMulticastUDP(nil) 只在系统默认网卡上加入，而该网卡常是
+//     虚拟网卡（Hyper-V、WSL、VPN / TUN 等），游戏却从实体网卡发出广播。已加入的网卡会返回错误，忽略即可。
+func setupMulticastListener(conn *net.UDPConn, group net.IP) {
+	packetConn := ipv4.NewPacketConn(conn)
+	_ = packetConn.SetMulticastLoopback(true)
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return
+	}
+	for i := range interfaces {
+		iface := interfaces[i]
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		_ = packetConn.JoinGroup(&iface, &net.UDPAddr{IP: group})
+	}
 }

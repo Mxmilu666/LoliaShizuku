@@ -77,6 +77,11 @@ const knownProcesses: Record<string, ServiceGuess> = {
   factorio: { name: "Factorio", icon: "fas fa-gamepad" },
 };
 
+// Minecraft Java 版的运行进程（Windows 官方启动器为 javaw.exe）。「对局域网开放」使用随机的高位端口，
+// 组播发现失败（防火墙、虚拟网卡等）时仍可凭进程名找到；端口固定的服务仍以端口识别为准
+const javaProcesses = new Set(["java", "javaw"]);
+const javaGuess: ServiceGuess = { name: "Java 程序（可能是 Minecraft）", icon: "fas fa-cube" };
+
 // 系统常驻进程，几乎不会用来做隧道，默认收起
 const noiseProcesses = new Set([
   "rapportd",
@@ -105,9 +110,12 @@ export function guessService(item: ListeningPort): ServiceGuess | null {
   const discovered = item.service ? discoveredServices[item.service] : undefined;
   if (discovered) return discovered;
   const byPort = knownPorts[`${item.protocol}/${item.port}`];
-  const byProcess = knownProcesses[processKey(item)];
-  // 进程名更可靠（例如 nginx 监听在 8081）；java 等通用进程以端口为准
-  return byProcess ?? byPort ?? null;
+  if (javaProcesses.has(processKey(item))) {
+    // java 是通用进程，以端口为准（如 25565）；只考虑 TCP 监听（游戏端口）
+    return byPort ?? (item.protocol === "tcp" ? javaGuess : null);
+  }
+  // 进程名更可靠（例如 nginx 监听在 8081）
+  return knownProcesses[processKey(item)] ?? byPort ?? null;
 }
 
 /** 是否默认展示：识别出的服务，或非临时端口且非系统常驻进程。 */

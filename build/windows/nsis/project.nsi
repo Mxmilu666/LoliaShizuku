@@ -93,6 +93,11 @@ Section
     
     !insertmacro wails.files
 
+    # 允许入站 UDP：扫描 Minecraft「对局域网开放」的组播广播（224.0.2.60:4445）。
+    # 否则首次运行时防火墙弹窗若被取消，或只允许了与当前网络类型不符的配置，组播包会被丢弃。
+    nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${INFO_PRODUCTNAME}"'
+    nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${INFO_PRODUCTNAME}" dir=in action=allow program="$INSTDIR\${PRODUCT_EXECUTABLE}" enable=yes profile=any'
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
@@ -108,6 +113,8 @@ Section "uninstall"
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
 
     RMDir /r $INSTDIR
+
+    nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${INFO_PRODUCTNAME}"'
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"

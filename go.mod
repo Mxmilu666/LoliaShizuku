@@ -7,6 +7,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/wailsapp/wails/v3 v3.0.0-beta.28
 	github.com/zalando/go-keyring v0.2.6
+	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.35.0
 )
 
