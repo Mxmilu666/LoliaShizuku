@@ -31,7 +31,7 @@
   "devDependencies": {
     "@babel/types": "^7.29.0",
     "@fortawesome/fontawesome-free": "^7.2.0",
-    "@iconify/json": "^2.2.439",
+    "@iconify/json": "^2.2.546",
     "@mdi/font": "^7.4.47",
     "@types/node": "^25.2.3",
     "@types/qrcode": "1.5.6",
