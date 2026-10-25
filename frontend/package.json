@@ -20,7 +20,7 @@
     "dompurify": "3.4.16",
     "echarts": "^6.0.0",
     "markdown-it": "15.0.2",
-    "pinia": "^3.0.4",
+    "pinia": "^4.1.0",
     "qrcode": "1.5.4",
     "tailwindcss": "^4.1.18",
     "unplugin-fonts": "^1.4.0",
