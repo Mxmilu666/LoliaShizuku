@@ -15,7 +15,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@unovis/vue": "^1.6.4",
     "@vueuse/core": "^14.2.1",
-    "@wailsio/runtime": "3.0.0-beta.28",
+    "@wailsio/runtime": "3.0.0-beta.34",
     "ansi_up": "6.0.6",
     "dompurify": "3.4.16",
     "echarts": "^6.0.0",
