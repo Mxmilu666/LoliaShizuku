@@ -5,9 +5,9 @@ go 1.27.1
 require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/shirou/gopsutil/v4 v4.26.9
-	github.com/wailsapp/wails/v3 v3.0.0-beta.28
+	github.com/wailsapp/wails/v3 v3.1.0-nightly.20261028
 	github.com/zalando/go-keyring v0.2.6
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.35.0
 )
 
